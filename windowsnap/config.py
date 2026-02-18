@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_DIR = Path.home() / ".windowsnap"
 DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / "config.yaml"
-BUNDLED_CONFIG = Path(__file__).parent.parent / "config.yaml"
+# PyInstaller unpacks --add-data files to sys._MEIPASS; normal runs use the repo root
+import sys
+_base_dir = Path(getattr(sys, '_MEIPASS', Path(__file__).parent.parent))
+BUNDLED_CONFIG = _base_dir / "config.yaml"
 
 
 def get_default_config() -> dict[str, Any]:
