@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
+*.spec
 dist/
 build/
 .env
+phw_cowork_prompt.md
