@@ -347,7 +347,7 @@ fn parse_hotkey(s: &str) -> Option<HotKey> {
     Some(HotKey::new(Some(mods), code))
 }
 
-/// Teal circle with 2x2 white grid — the WindowSnap icon
+/// Neon cyan/magenta icon with 2x2 grid and "!" glyph — synthwave WindowSnap
 fn create_icon() -> Icon {
     let size = 32u32;
     let mut rgba = vec![0u8; (size * size * 4) as usize];
@@ -356,10 +356,15 @@ fn create_icon() -> Icon {
     let radius = center - 1.0;
 
     // Grid cell parameters
-    let pad = (size as f32 * 0.3) as i32;
+    let pad = (size as f32 * 0.28) as i32;
     let gap = 3i32;
-    let cell_w = ((size as i32 - 2 * pad - gap) / 2) as f32;
+    let cell_w = (size as i32 - 2 * pad - gap) / 2;
     let cell_h = cell_w;
+
+    // "!" glyph — 3px wide, centered in the icon
+    // Stem: rows 5..=11, dot: row 13..=14
+    let bang_x_center = size as i32 / 2;
+    let bang_half_w = 1; // 3px wide
 
     for y in 0..size {
         for x in 0..size {
@@ -369,23 +374,37 @@ fn create_icon() -> Icon {
             let idx = ((y * size + x) * 4) as usize;
 
             if dist <= radius {
-                // Teal background (#009688)
-                let mut r = 0u8;
-                let mut g = 150u8;
-                let mut b = 136u8;
-                let a = 230u8;
+                // Angle-based cyan→magenta gradient
+                let angle = dy.atan2(dx);
+                let t = (angle + std::f32::consts::PI) / (2.0 * std::f32::consts::PI);
 
-                // Check if this pixel is in one of the 4 grid cells
+                let edge_factor = (dist / radius).powi(3);
+
+                // Cyan (#00fff0) → Magenta (#ff00ff)
+                let glow_r = 255.0 * t;
+                let glow_g = 255.0 * (1.0 - t);
+                let glow_b = 240.0 + 15.0 * t;
+
+                // Dark base: #0a0a1a
+                let base_r = 10.0;
+                let base_g = 10.0;
+                let base_b = 26.0;
+
+                let mut r = base_r + (glow_r - base_r) * edge_factor * 0.8;
+                let mut g = base_g + (glow_g - base_g) * edge_factor * 0.8;
+                let mut b = base_b + (glow_b - base_b) * edge_factor * 0.8;
+
+                // Grid cells — neon cyan fill
                 let px = x as i32;
                 let py = y as i32;
                 let mut in_cell = false;
 
                 for row in 0..2 {
                     for col in 0..2 {
-                        let cx0 = pad + col * (cell_w as i32 + gap);
-                        let cy0 = pad + row * (cell_h as i32 + gap);
-                        let cx1 = cx0 + cell_w as i32;
-                        let cy1 = cy0 + cell_h as i32;
+                        let cx0 = pad + col * (cell_w + gap);
+                        let cy0 = pad + row * (cell_h + gap);
+                        let cx1 = cx0 + cell_w;
+                        let cy1 = cy0 + cell_h;
                         if px >= cx0 && px < cx1 && py >= cy0 && py < cy1 {
                             in_cell = true;
                         }
@@ -393,21 +412,38 @@ fn create_icon() -> Icon {
                 }
 
                 if in_cell {
-                    r = 255;
-                    g = 255;
-                    b = 255;
+                    // Neon cyan grid cells
+                    r = 0.0;
+                    g = 255.0;
+                    b = 240.0;
                 }
 
-                rgba[idx] = r;
-                rgba[idx + 1] = g;
-                rgba[idx + 2] = b;
-                rgba[idx + 3] = a;
+                // "!" overlay — bright magenta, drawn on top of everything
+                let is_bang_stem = py >= 5 && py <= 11
+                    && px >= bang_x_center - bang_half_w
+                    && px <= bang_x_center + bang_half_w;
+                let is_bang_dot = py >= 13 && py <= 14
+                    && px >= bang_x_center - bang_half_w
+                    && px <= bang_x_center + bang_half_w;
+
+                if is_bang_stem || is_bang_dot {
+                    r = 255.0;
+                    g = 0.0;
+                    b = 255.0;
+                }
+
+                rgba[idx] = r.clamp(0.0, 255.0) as u8;
+                rgba[idx + 1] = g.clamp(0.0, 255.0) as u8;
+                rgba[idx + 2] = b.clamp(0.0, 255.0) as u8;
+                rgba[idx + 3] = 255;
             } else if dist <= radius + 1.0 {
-                // Anti-aliased edge
-                let alpha = ((1.0 - (dist - radius)) * 230.0).clamp(0.0, 230.0);
-                rgba[idx] = 0;
-                rgba[idx + 1] = 150;
-                rgba[idx + 2] = 136;
+                // Anti-aliased edge with gradient
+                let alpha = ((1.0 - (dist - radius)) * 255.0).clamp(0.0, 255.0);
+                let angle = dy.atan2(dx);
+                let t = (angle + std::f32::consts::PI) / (2.0 * std::f32::consts::PI);
+                rgba[idx] = (255.0 * t).clamp(0.0, 255.0) as u8;
+                rgba[idx + 1] = (255.0 * (1.0 - t) * 0.5).clamp(0.0, 255.0) as u8;
+                rgba[idx + 2] = (240.0 + 15.0 * t).clamp(0.0, 255.0) as u8;
                 rgba[idx + 3] = alpha as u8;
             }
         }
