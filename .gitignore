@@ -7,3 +7,7 @@ dist/
 build/
 .env
 phw_cowork_prompt.md
+
+# Rust
+target/
+Cargo.lock
