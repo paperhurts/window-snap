@@ -5,111 +5,104 @@ Custom window arrangement system tray app for Windows 11. Because Microsoft's sn
 ## Setup
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Build
+cargo build --release
 
-# Run
-python windowsnap.py
+# Run (release — no console window)
+./target/release/window-snap.exe
+
+# Run (debug — logs visible in terminal)
+cargo run
 ```
 
-Or run as a module:
-
-```bash
-python -m windowsnap
-```
+The release binary is a single 2.2MB `.exe` with no dependencies.
 
 ## Usage
 
 Once running, WindowSnap lives in your system tray (bottom-right, near the clock).
 
-**Left-click** the tray icon to see the layout menu.
-**Right-click** for the full menu including settings.
+**Right-click** the tray icon for the full menu.
 
 ### Default Hotkeys
 
 | Hotkey | Layout | Description |
 |--------|--------|-------------|
 | `Ctrl+Alt+1` | 4-Column Dev | Claude \| VS Code \| Terminal \| Browser |
-| `Ctrl+Alt+2` | 2-Column Split | Two equal columns |
-| `Ctrl+Alt+3` | Main + Sidebar | 65% main \| 35% sidebar |
-| `Ctrl+Alt+4` | Fullscreen | Single window maximized |
-| `Ctrl+Alt+5` | 3-Column | Three equal columns |
+| `Ctrl+Alt+2` | Dev Lite | Claude \| Browser (wide) \| Terminal |
+| `Ctrl+Alt+3` | Chat Browse | Signal \| Claude \| Browser (wide) |
+| `Ctrl+Alt+4` | BlueStacks | Up to 4 instances, 25% each |
+| `Ctrl+Alt+5` | Claude CLI | Claude \| VS Code/Terminal (wide) \| Browser |
 
 ### Tray Menu Options
 
 - **Layout names** — click to apply that layout
-- **Refresh Window List** — re-scan open windows (logged to console/log file)
-- **Edit Config** — opens `~/.windowsnap/config.yaml` in your default editor
+- **Edit Config** — opens `~/.windowsnap/config.toml` in your default editor
 - **Reload Config** — hot-reload config without restarting the app
 - **Start with Windows** — toggle auto-start on login
 - **Quit** — exit the app
 
 ## Customizing Layouts
 
-All configuration lives in `~/.windowsnap/config.yaml`. Edit it directly — no GUI needed.
+All configuration lives in `~/.windowsnap/config.toml`. Edit it directly — no GUI needed.
 
 ### Adding a Layout
 
-```yaml
-layouts:
-  my-layout:
-    hotkey: ctrl+alt+6          # optional
-    monitor: 0                  # 0 = primary, 1 = secondary
-    columns:
-      - width_percent: 40
-        match:
-          - title_contains: "Slack"
-      - width_percent: 60
-        match:
-          - title_contains: "Chrome"
+```toml
+[layouts.my-layout]
+hotkey = "ctrl+alt+6"          # optional
+monitor = 0                    # 0 = primary, 1 = secondary
+
+[[layouts.my-layout.columns]]
+width_percent = 40
+match = [{ title_contains = "Slack" }]
+
+[[layouts.my-layout.columns]]
+width_percent = 60
+match = [{ title_contains = "Chrome" }]
 ```
 
 ### Window Matching
 
-Each column has `match` rules that find windows by title:
+Each column has `match` rules that find windows by title or process name:
 
-```yaml
-match:
-  - title_contains: "Chrome"    # matches any window with "Chrome" in the title
-  - title_contains: "Firefox"   # rules are OR'd — first match wins
+```toml
+match = [
+    { title_contains = "Chrome" },    # matches any window with "Chrome" in the title
+    { title_contains = "Firefox" },   # rules are OR'd — first match wins
+    { process_name = "HD-Player.exe" },  # match by executable name
+]
 ```
 
 - Rules are **case-insensitive**
 - Multiple rules per column are OR'd (first match wins)
-- `match: []` (empty) means "skip this slot"
+- `match = []` (empty) means "skip this slot"
 - If a matched window is minimized, it gets restored automatically
 
 ### Multi-Monitor
 
-Set `monitor: 0` for primary, `monitor: 1` for secondary, etc. Monitor detection is automatic.
+Set `monitor = 0` for primary, `monitor = 1` for secondary, etc. Monitor detection is automatic.
 
 ### Gaps
 
 The `gap` setting controls pixel spacing between windows:
 
-```yaml
-settings:
-  gap: 5    # 0 for no gaps, 10 for more breathing room
+```toml
+[settings]
+gap = 5    # 0 for no gaps, 10 for more breathing room
 ```
 
 ## Windows Startup
 
-Use the "Start with Windows" toggle in the tray menu, or manually add a shortcut to:
-
-```
-pythonw.exe "C:\path\to\windowsnap.py"
-```
-
-in your Startup folder (`shell:startup`).
+Use the "Start with Windows" toggle in the tray menu. This adds/removes a registry entry that launches the exe on login.
 
 ## Logging
 
-Logs are written to `~/.windowsnap/windowsnap.log` and stdout (if running from a terminal).
+In debug mode (`cargo run`), logs go to stdout. The release build has no console window.
 
 ## Troubleshooting
 
-**Hotkeys not working?** The `keyboard` library may need admin privileges. Try running from an elevated terminal.
+**Hotkeys not working?** Some hotkey combinations may conflict with other apps. Try a different combo in your config.
 
-**Windows not moving?** Some apps (UWP, certain Electron apps) resist resizing. WindowSnap does best-effort.
+**Windows not moving?** Some apps (UWP, certain Electron apps) resist resizing. WindowSnap does best-effort. Running as admin may help.
 
-**Wrong monitor?** Check `monitor: N` in your layout config. Run "Refresh Window List" to see what WindowSnap detects.
+**Wrong monitor?** Check `monitor = N` in your layout config.
