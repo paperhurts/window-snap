@@ -1,3 +1,16 @@
+# Testing: Privacy Policy on GitHub Pages
+
+## What Changed
+A privacy policy is now hosted via GitHub Pages (issue #2). It lives on a new orphan `gh-pages` branch — `main` and `rust-port` code are untouched. The policy states WindowSnap collects no data (no telemetry, no network access, local-only config).
+
+## How to Test
+1. Open https://paperhurts.github.io/window-snap/privacy.html — the policy should load, styled, in both light and dark mode (follows system theme).
+2. Open https://paperhurts.github.io/window-snap/ — a small landing page linking to the repo and the policy.
+3. Read the policy content and confirm it matches reality — especially if the app ever gains an update checker or any network feature, this page must be updated first.
+4. Use the privacy.html URL in any store listing form that asks for a privacy policy.
+
+---
+
 # Testing: WindowSnap Rust Port
 
 ## What Changed
