@@ -1,6 +1,8 @@
 # Project Status
 
 ## Current State
+- **Privacy policy**: hosted on GitHub Pages at https://paperhurts.github.io/window-snap/privacy.html
+  (`gh-pages` branch, plain static HTML — landing page at site root; issue #2)
 - **Python version**: stable on `main` branch, fully functional
 - **Rust port**: on `rust-port` branch, compiles and builds (2.2MB release binary)
   - All features implemented: tray menu, hotkeys, window snapping, config, startup toggle
