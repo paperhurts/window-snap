@@ -1,91 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
 <title>WindowSnap — Privacy Policy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #ffffff;
-    --fg: #1a1a2e;
-    --muted: #5a5a72;
-    --accent: #0f766e;
-    --rule: #e4e4ee;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #14141f;
-      --fg: #e8e8f0;
-      --muted: #a0a0b8;
-      --accent: #2dd4bf;
-      --rule: #2c2c40;
-    }
-  }
   * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
   body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--fg);
-    font: 17px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #0c0a14;
+    color: #e8e4f0;
+    font: 400 19px/1.65 'Crimson Pro', serif;
+    background-image:
+      radial-gradient(ellipse at 20% 0%, rgba(180,74,255,0.07) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 100%, rgba(0,229,255,0.05) 0%, transparent 60%);
+    min-height: 100vh;
+    position: relative;
   }
-  main {
-    max-width: 42rem;
-    margin: 0 auto;
-    padding: 3rem 1.5rem 5rem;
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(180,74,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(180,74,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
   }
-  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 0.25rem; }
-  .meta { color: var(--muted); font-size: 0.95rem; margin-bottom: 2.5rem; }
-  h2 {
-    font-size: 1.2rem;
-    margin: 2.25rem 0 0.5rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--rule);
-  }
-  p { margin: 0.75rem 0; }
-  ul { margin: 0.75rem 0; padding-left: 1.4rem; }
-  li { margin: 0.35rem 0; }
-  a { color: var(--accent); }
-  code {
-    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-    font-size: 0.9em;
-    background: var(--rule);
-    padding: 0.1em 0.35em;
-    border-radius: 4px;
-  }
-  .tldr {
-    border: 1px solid var(--rule);
-    border-left: 4px solid var(--accent);
-    border-radius: 6px;
-    padding: 1rem 1.25rem;
-    margin: 0 0 1rem;
-  }
-  .tldr strong { display: block; margin-bottom: 0.25rem; }
+  .wrap { position: relative; max-width: 780px; margin: 0 auto; padding: 0 24px 80px; }
+  .nav { display: flex; justify-content: space-between; align-items: center; padding: 28px 0; }
+  .wordmark { font: 700 20px/1 'Crimson Pro', serif; letter-spacing: -0.02em; color: #e8e4f0; text-decoration: none; }
+  .wordmark span { color: #00e5ff; text-shadow: 0 0 20px rgba(0,229,255,0.4); }
+  .navlinks { display: flex; gap: 28px; font: 500 15px/1 'Crimson Pro', serif; }
+  .navlinks a { color: #8a839b; text-decoration: none; }
+  .navlinks a:hover { color: #00e5ff; }
+  .kicker { font: 500 14px/1 'JetBrains Mono', monospace; color: #ff006e; text-transform: uppercase; letter-spacing: 0.12em; margin: 70px 0 20px; }
+  h1 { font: 600 52px/1.08 'Crimson Pro', serif; letter-spacing: -0.02em; margin: 0 0 10px; text-wrap: pretty; }
+  h1 em { font-style: normal; color: #00e5ff; text-shadow: 0 0 40px rgba(0,229,255,0.35); }
+  .updated { font: 400 14px/1 'JetBrains Mono', monospace; color: #8a839b; margin-bottom: 44px; }
+  h2 { font: 600 30px/1.2 'Crimson Pro', serif; letter-spacing: -0.01em; margin: 48px 0 14px; color: #e8e4f0; }
+  p { margin: 0 0 16px; color: #b8b2c6; }
+  strong { color: #e8e4f0; font-weight: 600; }
+  a { color: #00e5ff; text-decoration: none; }
+  a:hover { opacity: 0.8; }
+  ul { margin: 0 0 16px; padding-left: 24px; color: #b8b2c6; }
+  li { margin-bottom: 8px; }
+  li::marker { color: #b44aff; }
+  code { font: 500 0.78em/1 'JetBrains Mono', monospace; background: #13111d; border: 1px solid rgba(180,74,255,0.2); border-radius: 6px; padding: 3px 7px; color: #00e5ff; white-space: nowrap; }
+  .summary { background: #13111d; border: 1px solid rgba(0,229,255,0.25); border-radius: 18px; padding: 26px 30px; margin: 0 0 8px; box-shadow: 0 0 30px rgba(0,229,255,0.06); }
+  .summary p { margin: 0; font-size: 21px; color: #e8e4f0; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: 16px; }
+  th { font: 500 13px/1.4 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.08em; color: #b44aff; text-align: left; padding: 10px 14px; border-bottom: 1px solid rgba(180,74,255,0.3); }
+  td { padding: 12px 14px; border-bottom: 1px solid rgba(180,74,255,0.12); color: #b8b2c6; vertical-align: top; }
+  .footer { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-top: 80px; padding-top: 24px; border-top: 1px solid rgba(180,74,255,0.15); font: 400 13px/1 'JetBrains Mono', monospace; color: #8a839b; }
+  .footer a { color: #8a839b; }
+  .footer a:hover { color: #00e5ff; }
 </style>
 </head>
 <body>
-<main>
-  <h1>WindowSnap Privacy Policy</h1>
-  <p class="meta">Effective date: July 13, 2026</p>
-
-  <div class="tldr">
-    <strong>In short</strong>
-    WindowSnap collects no data. It has no telemetry, no analytics, no accounts,
-    and it never connects to the internet.
+<div class="wrap">
+  <div class="nav">
+    <a class="wordmark" href="https://paperhurts.dev">paperhurts<span>*</span></a>
+    <div class="navlinks">
+      <a href="https://paperhurts.github.io/window-snap/">Project page</a>
+      <a href="https://github.com/paperhurts/window-snap">Source</a>
+    </div>
   </div>
+  <div class="kicker">Privacy policy</div>
+  <h1>WindowSnap <em>collects nothing.</em></h1>
+  <div class="updated">Effective date: July 13, 2026</div>
 
-  <h2>What WindowSnap is</h2>
-  <p>
-    WindowSnap is a lightweight Windows utility that lets you move and resize
-    application windows into screen slots using keyboard shortcuts. It runs
-    entirely on your computer.
-  </p>
+  <div class="summary"><p><strong>WindowSnap collects no data.</strong> It has no telemetry, no analytics, no accounts, and it never connects to the internet.</p></div>
+
+  <p style="margin-top:24px">WindowSnap is a lightweight Windows utility that lets you move and resize application windows into screen slots using keyboard shortcuts. It runs entirely on your computer.</p>
 
   <h2>Data collection</h2>
-  <p>
-    WindowSnap does not collect, store, transmit, sell, or share any personal
-    data or usage data. Specifically, it has:
-  </p>
+  <p>WindowSnap does not collect, store, transmit, sell, or share any personal data or usage data. Specifically, it has:</p>
   <ul>
     <li>No telemetry or analytics</li>
     <li>No crash reporting</li>
@@ -95,41 +87,27 @@
   </ul>
 
   <h2>Local data</h2>
-  <p>
-    The only data WindowSnap writes is its own settings file, stored on your
-    computer at <code>~/.windowsnap/config.toml</code>. It contains your hotkey
-    and layout preferences and nothing else. It never leaves your machine, and
-    you can delete it at any time.
-  </p>
+  <p>The only data WindowSnap writes is its own settings file, stored on your computer at <code>~/.windowsnap/config.toml</code>. It contains your hotkey and layout preferences and nothing else. It never leaves your machine, and you can delete it at any time.</p>
 
   <h2>Window information</h2>
-  <p>
-    To do its job, WindowSnap uses standard Windows APIs to list open windows
-    and their titles so it can match and move them. This information is
-    processed in memory only — it is never logged, saved, or transmitted
-    anywhere.
-  </p>
+  <p>To do its job, WindowSnap uses standard Windows APIs to list open windows and their titles so it can match and move them. This information is processed in memory only — it is never logged, saved, or transmitted anywhere.</p>
 
   <h2>Third-party services</h2>
   <p>WindowSnap uses no third-party services, SDKs, or libraries that collect data.</p>
 
   <h2>Children's privacy</h2>
-  <p>
-    WindowSnap does not collect data from anyone, including children.
-  </p>
+  <p>WindowSnap does not collect data from anyone, including children.</p>
 
   <h2>Changes to this policy</h2>
-  <p>
-    If this policy ever changes — for example, if a future version adds an
-    online feature — the updated policy will be posted at this page with a new
-    effective date.
-  </p>
+  <p>If this policy ever changes — for example, if a future version adds an online feature — the updated policy will be posted at this page with a new effective date.</p>
 
   <h2>Contact</h2>
-  <p>
-    Questions about this policy? Open an issue on the
-    <a href="https://github.com/paperhurts/window-snap/issues">WindowSnap GitHub repository</a>.
-  </p>
-</main>
+  <p>Questions about this policy? Open an issue on the <a href="https://github.com/paperhurts/window-snap/issues">WindowSnap GitHub repository</a>.</p>
+
+  <div class="footer">
+    <span>© 2026 paperhurts LLC</span>
+    <a href="https://github.com/paperhurts/window-snap/issues">Questions? Open an issue ↗</a>
+  </div>
+</div>
 </body>
 </html>
