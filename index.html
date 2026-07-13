@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>WindowSnap</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1a1a2e; --muted: #5a5a72; --accent: #0f766e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14141f; --fg: #e8e8f0; --muted: #a0a0b8; --accent: #2dd4bf; }
+  }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: grid; place-items: center; min-height: 100vh;
+  }
+  main { text-align: center; padding: 2rem; }
+  h1 { margin: 0 0 0.25rem; }
+  p { color: var(--muted); margin: 0.5rem 0 1.5rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>WindowSnap</h1>
+  <p>Hotkey-driven window snapping for Windows.</p>
+  <p>
+    <a href="https://github.com/paperhurts/window-snap">GitHub repository</a> ·
+    <a href="privacy.html">Privacy policy</a>
+  </p>
+</main>
+</body>
+</html>
