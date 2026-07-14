@@ -1,6 +1,0 @@
-pywin32>=306
-pystray>=0.19
-Pillow>=10.0
-PyYAML>=6.0
-keyboard>=0.13
-psutil>=5.9
