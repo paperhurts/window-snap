@@ -202,6 +202,8 @@ match = [{ process_name = "HD-Player.exe" }]
 #                    prefer this for terminals and browsers.
 # A single rule with BOTH fields requires both to match (AND), e.g.
 #   { process_name = "powershell.exe", title_contains = "admin" }
+# If several windows match, the topmost one wins — use an AND rule to pin a
+# specific window (e.g. a terminal you renamed after your project).
 # Empty match = [] means "skip this slot".
 "#;
 

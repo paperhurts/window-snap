@@ -1,3 +1,20 @@
+# Testing: Release Logging + Multi-Match Docs (issues #5, #6)
+
+## What Changed
+Branch: `issue-5-6-logging-and-match-docs` (PR closes both issues). v0.3.0.
+
+1. **Release builds now log** to `~/.windowsnap/windowsnap.log` (rotates at 512 KB to `windowsnap.log.1`). Debug `cargo run` still logs to the terminal. Each layout application logs which window went where, with process name and hwnd.
+2. **Multi-match behavior documented** (no logic change): topmost matching window wins a slot. README + config comments now show the AND-rule pinning pattern: `{ process_name = "WindowsTerminal.exe", title_contains = "my-project" }`.
+3. Heads-up: your log file had 71 KB of old Python-version entries from February; the Rust app now appends below them. It'll rotate away naturally.
+
+## How to Test (already machine-verified end-to-end)
+I launched the new build and fired Ctrl+Alt+1 programmatically — the log shows all 4 columns placed with process names. If you want to see it yourself:
+1. The new build is already running in your tray (v0.3.0 binary).
+2. Press **Ctrl+Alt+1**, then open `%USERPROFILE%\.windowsnap\windowsnap.log` — the tail shows the layout application and exactly which window landed in each column.
+3. Optional: add a pinning rule for your project terminal (see README "When Several Windows Match").
+
+---
+
 # Testing: Process-Based Window Matching (issue #3)
 
 ## What Changed

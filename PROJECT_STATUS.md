@@ -19,6 +19,9 @@
 - `src/windows.rs` — Win32 window enum, monitor detection, matching, slot calc, move (DWM border comp); unit tests at bottom
 - `src/errors.rs` — MessageBoxW wrapper
 
+- **v0.3.0 (2026-07-16, issues #5 + #6)**: release builds log to `~/.windowsnap/windowsnap.log`
+  (rotates at 512 KB; per-column placements logged with process + hwnd); multi-match behavior
+  documented — topmost matching window wins, pin with an AND rule (`process_name` + `title_contains`)
+
 ## Open Issues
-- #5: Multi-match ambiguity — same layout can move a different window each run (document Z-order behavior + AND-rule pinning pattern)
-- #6: Release builds have no logging sink — wire up the unused `Config::log_path()`
+- none
