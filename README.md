@@ -63,20 +63,27 @@ match = [{ title_contains = "Chrome" }]
 
 ### Window Matching
 
-Each column has `match` rules that find windows by title or process name:
+Each column has `match` rules that find windows by title, process name, or both:
 
 ```toml
 match = [
-    { title_contains = "Chrome" },    # matches any window with "Chrome" in the title
-    { title_contains = "Firefox" },   # rules are OR'd — first match wins
-    { process_name = "HD-Player.exe" },  # match by executable name
+    { process_name = "WindowsTerminal.exe" },  # match by executable name (robust)
+    { title_contains = "Chrome" },             # match by window title (fragile)
+    { process_name = "powershell.exe", title_contains = "admin" },  # both = AND
 ]
 ```
 
-- Rules are **case-insensitive**
+- Rules are **case-insensitive** substring checks
 - Multiple rules per column are OR'd (first match wins)
+- A single rule with **both** `process_name` and `title_contains` requires both to match (AND)
 - `match = []` (empty) means "skip this slot"
 - If a matched window is minimized, it gets restored automatically
+
+**Prefer `process_name` over `title_contains`** — titles change when you rename a
+terminal, switch browser tabs, or open a different document; the exe name doesn't.
+Common ones: `WindowsTerminal.exe`, `powershell.exe`, `pwsh.exe`, `cmd.exe`,
+`brave.exe`, `chrome.exe`, `firefox.exe`, `msedge.exe`, `Code.exe`, `claude.exe`,
+`Signal.exe`.
 
 ### Multi-Monitor
 
