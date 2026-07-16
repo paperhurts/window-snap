@@ -6,10 +6,10 @@
   - 2.2MB release binary, no dependencies
 - **Privacy policy**: hosted on GitHub Pages at https://paperhurts.github.io/window-snap/privacy.html
   (`gh-pages` branch, plain static HTML — landing page at site root; issue #2)
-- **In flight**: `issue-3-process-match` branch (unpushed) — process-based window matching
+- **Process-based matching** (issue #3, branch `issue-3-process-match`): done, **user-verified live**
+  (renamed PowerShell window snapped via Ctrl+Alt+1 on 2026-07-16)
   - Fixed: combined `title_contains` + `process_name` rules now AND (process was silently ignored)
-  - First unit tests added (10, `cargo test`); default + live config updated to match terminals/browsers by exe name
-  - Waiting on user live-test per tasks/user.md before push/PR
+  - First unit tests added (11, `cargo test`); default + live config match terminals/browsers by exe name
 
 ## Architecture (Rust)
 - `src/main.rs` — App struct (winit event loop), tray menu, icon gen, hotkey dispatch, startup registry
