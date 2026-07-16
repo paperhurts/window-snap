@@ -244,6 +244,36 @@ fn get_process_name(pid: u32) -> String {
     }
 }
 
+/// Check whether a single rule matches a window.
+/// title_contains and process_name are each case-insensitive substring checks;
+/// when a rule specifies both, the window must satisfy both (AND).
+fn rule_matches(rule: &MatchRule, window: &WindowInfo) -> bool {
+    let title_search = rule.title_contains.as_deref().unwrap_or("");
+    let proc_search = rule.process_name.as_deref().unwrap_or("");
+
+    // A rule with no criteria matches nothing.
+    if title_search.is_empty() && proc_search.is_empty() {
+        return false;
+    }
+
+    if !title_search.is_empty()
+        && !window.title.to_lowercase().contains(&title_search.to_lowercase())
+    {
+        return false;
+    }
+
+    if !proc_search.is_empty()
+        && !window
+            .process_name
+            .to_lowercase()
+            .contains(&proc_search.to_lowercase())
+    {
+        return false;
+    }
+
+    true
+}
+
 /// Find the best matching window for a set of match rules.
 /// Rules are OR'd — first rule that matches any window wins.
 /// Removes the matched window from the pool.
@@ -251,30 +281,13 @@ pub fn match_window(
     windows: &mut Vec<WindowInfo>,
     rules: &[MatchRule],
 ) -> Option<WindowInfo> {
-    if rules.is_empty() {
-        return None;
-    }
-
     for rule in rules {
-        let title_search = rule.title_contains.as_deref().unwrap_or("");
-        let proc_search = rule.process_name.as_deref().unwrap_or("");
-
-        if title_search.is_empty() && proc_search.is_empty() {
-            continue;
-        }
-
         // Find candidates, prefer non-minimized
         let mut best_idx: Option<usize> = None;
         let mut best_minimized = true;
 
         for (i, w) in windows.iter().enumerate() {
-            let matches = if !title_search.is_empty() {
-                w.title.to_lowercase().contains(&title_search.to_lowercase())
-            } else {
-                w.process_name.to_lowercase().contains(&proc_search.to_lowercase())
-            };
-
-            if matches {
+            if rule_matches(rule, w) {
                 if best_idx.is_none() || (best_minimized && !w.is_minimized) {
                     best_idx = Some(i);
                     best_minimized = w.is_minimized;
@@ -408,6 +421,164 @@ fn move_window(hwnd_val: isize, slot: &LayoutSlot) -> bool {
             log::warn!("Failed to move window hwnd={}", hwnd_val);
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn win(hwnd: isize, title: &str, process: &str, minimized: bool) -> WindowInfo {
+        WindowInfo {
+            hwnd,
+            title: title.to_string(),
+            process_name: process.to_string(),
+            is_minimized: minimized,
+        }
+    }
+
+    fn rule(title: Option<&str>, process: Option<&str>) -> MatchRule {
+        MatchRule {
+            title_contains: title.map(String::from),
+            process_name: process.map(String::from),
+        }
+    }
+
+    #[test]
+    fn matches_by_title_case_insensitive() {
+        let mut pool = vec![win(1, "Windows PowerShell", "powershell.exe", false)];
+        let matched = match_window(&mut pool, &[rule(Some("powershell"), None)]);
+        assert_eq!(matched.unwrap().hwnd, 1);
+        assert!(pool.is_empty());
+    }
+
+    #[test]
+    fn matches_renamed_window_by_process() {
+        // The bug report: a renamed PowerShell window must still match on process.
+        let mut pool = vec![
+            win(1, "Notes - Notepad", "notepad.exe", false),
+            win(2, "my custom window name", "powershell.exe", false),
+        ];
+        let matched = match_window(&mut pool, &[rule(None, Some("powershell.exe"))]);
+        assert_eq!(matched.unwrap().hwnd, 2);
+    }
+
+    #[test]
+    fn combined_rule_requires_both_title_and_process() {
+        // Rule with both fields is an AND: title alone must not match.
+        let mut pool = vec![
+            win(1, "admin session", "cmd.exe", false),
+            win(2, "admin session", "powershell.exe", false),
+        ];
+        let matched = match_window(
+            &mut pool,
+            &[rule(Some("admin"), Some("powershell.exe"))],
+        );
+        assert_eq!(matched.unwrap().hwnd, 2);
+        assert_eq!(pool.len(), 1);
+        assert_eq!(pool[0].hwnd, 1);
+    }
+
+    #[test]
+    fn combined_rule_matches_nothing_when_only_one_side_holds() {
+        let mut pool = vec![
+            win(1, "admin session", "cmd.exe", false),      // title yes, process no
+            win(2, "build output", "powershell.exe", false), // process yes, title no
+        ];
+        let matched = match_window(
+            &mut pool,
+            &[rule(Some("admin"), Some("powershell.exe"))],
+        );
+        assert!(matched.is_none());
+        assert_eq!(pool.len(), 2);
+    }
+
+    #[test]
+    fn first_rule_wins_over_later_rules() {
+        let mut pool = vec![
+            win(1, "some page - Firefox", "firefox.exe", false),
+            win(2, "some page - Brave", "brave.exe", false),
+        ];
+        let rules = [
+            rule(None, Some("brave.exe")),
+            rule(None, Some("firefox.exe")),
+        ];
+        let matched = match_window(&mut pool, &rules);
+        assert_eq!(matched.unwrap().hwnd, 2);
+    }
+
+    #[test]
+    fn prefers_non_minimized_candidate() {
+        let mut pool = vec![
+            win(1, "PowerShell", "powershell.exe", true),
+            win(2, "PowerShell", "powershell.exe", false),
+        ];
+        let matched = match_window(&mut pool, &[rule(None, Some("powershell.exe"))]);
+        assert_eq!(matched.unwrap().hwnd, 2);
+    }
+
+    #[test]
+    fn matched_window_leaves_pool_for_repeat_rules() {
+        // BlueStacks-style: same process rule on consecutive columns grabs distinct windows.
+        let mut pool = vec![
+            win(1, "BlueStacks 1", "HD-Player.exe", false),
+            win(2, "BlueStacks 2", "HD-Player.exe", false),
+        ];
+        let rules = [rule(None, Some("HD-Player.exe"))];
+        let first = match_window(&mut pool, &rules).unwrap();
+        let second = match_window(&mut pool, &rules).unwrap();
+        assert_ne!(first.hwnd, second.hwnd);
+        assert!(match_window(&mut pool, &rules).is_none());
+    }
+
+    #[test]
+    fn empty_rule_list_matches_nothing() {
+        let mut pool = vec![win(1, "PowerShell", "powershell.exe", false)];
+        assert!(match_window(&mut pool, &[]).is_none());
+        assert_eq!(pool.len(), 1);
+    }
+
+    fn test_monitor() -> MonitorInfo {
+        MonitorInfo {
+            index: 0,
+            work_area: (0, 0, 1920, 1040), // taskbar-clipped 1080p
+            full_rect: (0, 0, 1920, 1080),
+            is_primary: true,
+        }
+    }
+
+    fn col(width_percent: u32) -> Column {
+        Column {
+            width_percent,
+            match_rules: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn slots_fill_work_area_with_gaps() {
+        let gap = 5;
+        let columns = [col(25), col(25), col(25), col(25)];
+        let slots = calculate_slots(&columns, &test_monitor(), gap);
+        assert_eq!(slots.len(), 4);
+        assert_eq!(slots[0].x, gap);
+        assert_eq!(slots[0].y, gap);
+        assert_eq!(slots[0].height, 1040 - 2 * gap);
+        // Last column ends flush against the right work edge minus gap.
+        let last = &slots[3];
+        assert_eq!(last.x + last.width, 1920 - gap);
+        // Columns don't overlap and are separated by exactly one gap.
+        for pair in slots.windows(2) {
+            assert_eq!(pair[0].x + pair[0].width + gap, pair[1].x);
+        }
+    }
+
+    #[test]
+    fn last_slot_absorbs_rounding_remainder() {
+        let gap = 0;
+        let columns = [col(33), col(33), col(33)]; // 99% — remainder goes to last
+        let slots = calculate_slots(&columns, &test_monitor(), gap);
+        let total: i32 = slots.iter().map(|s| s.width).sum();
+        assert_eq!(total, 1920);
     }
 }
 
