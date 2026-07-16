@@ -85,6 +85,23 @@ Common ones: `WindowsTerminal.exe`, `powershell.exe`, `pwsh.exe`, `cmd.exe`,
 `brave.exe`, `chrome.exe`, `firefox.exe`, `msedge.exe`, `Code.exe`, `claude.exe`,
 `Signal.exe`.
 
+### When Several Windows Match
+
+A column places exactly one window. If several windows match (say five terminals
+and one terminal slot), the **topmost matching window** wins — roughly the one you
+used most recently — preferring non-minimized windows. Re-applying a layout can
+therefore pick a different terminal than last time.
+
+To deterministically pin one specific window, combine process and title in a
+single AND rule and list it first:
+
+```toml
+match = [
+    { process_name = "WindowsTerminal.exe", title_contains = "my-project" },  # this one
+    { process_name = "WindowsTerminal.exe" },                                 # else any terminal
+]
+```
+
 ### Multi-Monitor
 
 Set `monitor = 0` for primary, `monitor = 1` for secondary, etc. Monitor detection is automatic.
@@ -104,7 +121,10 @@ Use the "Start with Windows" toggle in the tray menu. This adds/removes a regist
 
 ## Logging
 
-In debug mode (`cargo run`), logs go to stdout. The release build has no console window.
+- Debug mode (`cargo run`): logs go to the terminal.
+- Release build (no console window): logs go to `~/.windowsnap/windowsnap.log`,
+  including which window was matched and placed for every column. The file rotates
+  once at 512 KB (previous log kept as `windowsnap.log.1`), so it stays under ~1 MB.
 
 ## Troubleshooting
 
