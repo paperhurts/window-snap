@@ -23,10 +23,39 @@ const MENU_ID_RELOAD_CONFIG: &str = "reload_config";
 const MENU_ID_TOGGLE_STARTUP: &str = "toggle_startup";
 const MENU_ID_QUIT: &str = "quit";
 
+/// Initialize logging. Debug builds log to stderr (visible under `cargo run`).
+/// Release builds have no console (windows_subsystem = "windows"), so they log
+/// to ~/.windowsnap/windowsnap.log instead, rotating once at 512 KB so the pair
+/// of files stays bounded at ~1 MB.
+fn init_logging() {
+    let mut builder =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
+    builder.format_timestamp_secs();
+
+    if !cfg!(debug_assertions) {
+        let path = Config::log_path();
+
+        const MAX_LOG_BYTES: u64 = 512 * 1024;
+        if std::fs::metadata(&path).map(|m| m.len() > MAX_LOG_BYTES).unwrap_or(false) {
+            let rotated = path.with_extension("log.1");
+            let _ = std::fs::rename(&path, rotated);
+        }
+
+        match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+            Ok(file) => {
+                builder.target(env_logger::Target::Pipe(Box::new(file)));
+            }
+            Err(_) => {
+                // Fall back to the (invisible) stderr logger rather than dying.
+            }
+        }
+    }
+
+    builder.init();
+}
+
 fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .format_timestamp_secs()
-        .init();
+    init_logging();
 
     let config = match Config::load() {
         Ok(c) => c,
