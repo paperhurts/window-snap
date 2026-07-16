@@ -277,6 +277,13 @@ fn rule_matches(rule: &MatchRule, window: &WindowInfo) -> bool {
 /// Find the best matching window for a set of match rules.
 /// Rules are OR'd — first rule that matches any window wins.
 /// Removes the matched window from the pool.
+///
+/// When several windows match a rule, the earliest in the pool wins
+/// (EnumWindows order = Z-order, topmost first — i.e. roughly the most
+/// recently used matching window), preferring non-minimized candidates.
+/// To deterministically target one specific window among several, use a
+/// combined AND rule, e.g.
+/// `{ process_name = "WindowsTerminal.exe", title_contains = "my-project" }`.
 pub fn match_window(
     windows: &mut Vec<WindowInfo>,
     rules: &[MatchRule],
@@ -508,6 +515,18 @@ mod tests {
     }
 
     #[test]
+    fn earliest_window_in_pool_wins_among_equal_matches() {
+        // Contract: pool order is EnumWindows Z-order (topmost first), and the
+        // earliest non-minimized match wins. See match_window docs.
+        let mut pool = vec![
+            win(1, "reader", "WindowsTerminal.exe", false),
+            win(2, "window-snap", "WindowsTerminal.exe", false),
+        ];
+        let matched = match_window(&mut pool, &[rule(None, Some("WindowsTerminal.exe"))]);
+        assert_eq!(matched.unwrap().hwnd, 1);
+    }
+
+    #[test]
     fn prefers_non_minimized_candidate() {
         let mut pool = vec![
             win(1, "PowerShell", "powershell.exe", true),
@@ -631,7 +650,10 @@ pub fn apply_layout(layout_name: &str, layout: &Layout, gap: i32) {
             {
                 move_window(win.hwnd, slot);
             }
-            log::info!("Column {}: placed '{}'", i, win.title);
+            log::info!(
+                "Column {}: placed '{}' ({}, hwnd=0x{:x})",
+                i, win.title, win.process_name, win.hwnd
+            );
         } else {
             let match_desc: Vec<&str> = col
                 .match_rules
