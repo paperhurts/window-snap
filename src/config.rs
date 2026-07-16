@@ -122,18 +122,20 @@ match = [{ title_contains = "Visual Studio Code" }]
 [[layouts.4-column-dev.columns]]
 width_percent = 25
 match = [
+    { process_name = "WindowsTerminal.exe" },
+    { process_name = "powershell.exe" },
+    { process_name = "pwsh.exe" },
+    { process_name = "cmd.exe" },
     { title_contains = "Terminal" },
-    { title_contains = "PowerShell" },
-    { title_contains = "Command Prompt" },
 ]
 
 [[layouts.4-column-dev.columns]]
 width_percent = 25
 match = [
-    { title_contains = "Brave" },
-    { title_contains = "Chrome" },
-    { title_contains = "Firefox" },
-    { title_contains = "Edge" },
+    { process_name = "brave.exe" },
+    { process_name = "chrome.exe" },
+    { process_name = "firefox.exe" },
+    { process_name = "msedge.exe" },
 ]
 
 # ─── Chat + browse: Signal | Claude | Browser (half screen) ───
@@ -152,10 +154,10 @@ match = [{ title_contains = "Claude" }]
 [[layouts.chat-browse.columns]]
 width_percent = 50
 match = [
-    { title_contains = "Brave" },
-    { title_contains = "Chrome" },
-    { title_contains = "Firefox" },
-    { title_contains = "Edge" },
+    { process_name = "brave.exe" },
+    { process_name = "chrome.exe" },
+    { process_name = "firefox.exe" },
+    { process_name = "msedge.exe" },
 ]
 
 # ─── BlueStacks: up to 4 instances, 25% each ───
@@ -194,6 +196,29 @@ match = [{ process_name = "HD-Player.exe" }]
 # match = [{ title_contains = "Chrome" }]
 #
 # Match rules are OR'd — the first window matching any rule gets placed.
-# Two match types: title_contains (window title) and process_name (exe name).
+# Two match types (both case-insensitive substring checks):
+#   title_contains — window title. Fragile: breaks if the window is renamed.
+#   process_name   — executable name (e.g. "powershell.exe"). Survives renames;
+#                    prefer this for terminals and browsers.
+# A single rule with BOTH fields requires both to match (AND), e.g.
+#   { process_name = "powershell.exe", title_contains = "admin" }
 # Empty match = [] means "skip this slot".
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_parses() {
+        let config: Config = toml::from_str(DEFAULT_CONFIG).expect("default config must parse");
+        assert!(!config.layouts.is_empty());
+        // The terminal column of the dev layout must carry process-based rules.
+        let dev = &config.layouts["4-column-dev"];
+        let terminal_col = &dev.columns[2];
+        assert!(terminal_col
+            .match_rules
+            .iter()
+            .any(|r| r.process_name.as_deref() == Some("powershell.exe")));
+    }
+}

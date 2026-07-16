@@ -1,3 +1,32 @@
+# Testing: Process-Based Window Matching (issue #3)
+
+## What Changed
+Branch: `issue-3-process-match` (not pushed — waiting on your test confirmation).
+
+1. **Engine fix** (`src/windows.rs`): a match rule with BOTH `title_contains` and `process_name` now requires both (AND). Previously the process name was silently ignored if a title was set. Title-only and process-only rules behave exactly as before.
+2. **First unit tests** in the repo: 10 tests covering `match_window` and `calculate_slots` (`cargo test`).
+3. **Default config** (baked into the binary for first-run) now matches terminals and browsers by process name.
+4. **Your live config** (`~/.windowsnap/config.toml`) was updated: the terminal columns in `4-column-dev`, `dev-lite`, and `claude-cli` now match `WindowsTerminal.exe` / `powershell.exe` / `pwsh.exe` / `cmd.exe` first, with the old title rules kept as fallbacks. Nothing else changed. **Backup at `~/.windowsnap/config.toml.bak`** — restore by copying it back.
+
+## How to Test
+1. Rebuild and restart the app (the engine fix is in the binary):
+   ```
+   cd C:\dev\window-snap
+   cargo build --release
+   ```
+   Quit the running WindowSnap from the tray, then start `target\release\window-snap.exe`.
+   (No restart needed for the config change alone — "Reload Config" covers that — but the AND fix needs the new binary.)
+2. Rename a PowerShell window: in PowerShell run
+   `$Host.UI.RawUI.WindowTitle = "totally not a shell"`
+   (In Windows Terminal you can also just rename the tab.)
+3. Press **Ctrl+Alt+1** (4-column-dev).
+4. **Expected**: the renamed PowerShell/Terminal window still snaps into column 3. Before this change it was skipped.
+5. Also spot-check Ctrl+Alt+2 and Ctrl+Alt+5 — their terminal columns got the same treatment.
+
+When it works, say so and I'll push the branch and open the PR / close issue #3.
+
+---
+
 # Testing: Privacy Policy on GitHub Pages
 
 ## What Changed
