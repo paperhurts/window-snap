@@ -48,6 +48,15 @@ pub struct Column {
     /// nor shift their neighbours. Omit it and the column tiles exactly as
     /// before.
     pub x_percent: Option<u32>,
+    /// Place every window matching this column's rules, not just the first.
+    ///
+    /// The extras are stacked at identical geometry rather than sharing the
+    /// slot, so each one gets the column's full width — the point is "make all
+    /// my browser windows this size", not "show them all at once". Which of
+    /// them ends up visible is unchanged: the window that was on top stays on
+    /// top of its stackmates.
+    #[serde(default)]
+    pub match_all: bool,
     #[serde(default, rename = "match")]
     pub match_rules: Vec<MatchRule>,
 }
@@ -323,6 +332,8 @@ match = [{ process_name = "HD-Player.exe" }]
 # match = [{ title_contains = "Chrome" }]
 #
 # Match rules are OR'd — the first window matching any rule gets placed.
+# Add match_all = true to a column to place EVERY matching window instead of
+# just the first (see "SEVERAL WINDOWS MATCH" below).
 # Two match types (both case-insensitive substring checks):
 #   title_contains — window title. Fragile: breaks if the window is renamed.
 #   process_name   — executable name (e.g. "powershell.exe"). Survives renames;
@@ -333,6 +344,30 @@ match = [{ process_name = "HD-Player.exe" }]
 # specific window (e.g. a terminal you renamed after your project).
 # Empty match = [] means "skip this slot".
 #
+# ─── SEVERAL WINDOWS MATCH ───
+#
+# A column normally places ONE window: the topmost match, preferring non-minimized
+# ones. Five browser windows and one browser column means four of them are left
+# where they are.
+#
+# match_all = true claims every matching window for that column and stacks them at
+# the same position, so they all get the column's full width. The one that was on
+# top stays on top; alt-tab between them as usual.
+#
+# [[layouts.dev.columns]]
+# width_percent = 30
+# match_all = true
+# match = [{ title_contains = "Brave" }]
+#
+# CAUTION: match_all amplifies loose rules. A broad fallback that was harmless
+# when only one window got placed will sweep up everything once the column claims
+# every match — a browser column with a "Notepad" fallback will drag every Notepad
+# window into the browser slot. Check the rules before switching match_all on.
+#
+# Windows claimed this way are removed from the pool, so a later column with the
+# same rules will find nothing. To spread matches ACROSS several slots instead of
+# stacking them, repeat the column without match_all — see the bluestacks layout.
+
 # ─── OVERLAPPING WINDOWS ───
 #
 # By default columns TILE: each one starts where the previous ended, so more
@@ -447,6 +482,24 @@ width_percent = 40
 "#,
         );
         assert_eq!(config.validate(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn match_all_defaults_to_false_and_parses_when_set() {
+        // Default matters: every existing config omits the field and must keep
+        // placing exactly one window per column.
+        let config = parse(
+            r#"
+[[layouts.l.columns]]
+width_percent = 50
+[[layouts.l.columns]]
+width_percent = 50
+match_all = true
+"#,
+        );
+        let columns = &config.layouts["l"].columns;
+        assert!(!columns[0].match_all);
+        assert!(columns[1].match_all);
     }
 
     #[test]

@@ -123,13 +123,41 @@ Common ones: `WindowsTerminal.exe`, `powershell.exe`, `pwsh.exe`, `cmd.exe`,
 
 ### When Several Windows Match
 
-A column places exactly one window. If several windows match (say five terminals
-and one terminal slot), the **topmost matching window** wins — roughly the one you
-used most recently — preferring non-minimized windows. Re-applying a layout can
-therefore pick a different terminal than last time.
+By default a column places exactly one window. If several windows match (say five
+terminals and one terminal slot), the **topmost matching window** wins — roughly the
+one you used most recently — preferring non-minimized windows. Re-applying a layout
+can therefore pick a different terminal than last time.
 
-To deterministically pin one specific window, combine process and title in a
-single AND rule and list it first:
+Three ways to change that:
+
+**Place them all.** Set `match_all = true` and the column claims every matching
+window, stacking them at the same position so each gets the column's full width:
+
+```toml
+[[layouts.dev.columns]]
+width_percent = 30
+match_all = true
+match = [{ title_contains = "Brave" }]
+```
+
+They are stacked, not tiled — the goal is "size all my browser windows the same",
+not "show them all at once". Whichever was on top stays on top; alt-tab between
+them as usual. Claimed windows leave the pool, so a later column with the same
+rules finds nothing.
+
+> **`match_all` amplifies loose rules.** A broad fallback that was harmless when
+> only one window got placed will sweep up everything once the column claims all
+> matches. A browser column with a `{ title_contains = "Notepad" }` fallback, added
+> so the slot was never empty, will pull every Notepad window into the browser slot.
+> Check a column's rules before turning `match_all` on, and prefer `process_name`.
+
+**Spread them across slots.** Repeat the column *without* `match_all`; each repeat
+claims the next match. The `bluestacks` layout in the default config does this for
+four emulator instances.
+
+**Pin one specific window.**
+
+Combine process and title in a single AND rule and list it first:
 
 ```toml
 match = [

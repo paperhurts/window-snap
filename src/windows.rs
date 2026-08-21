@@ -310,6 +310,25 @@ pub fn match_window(
     None
 }
 
+/// Claim the windows a column is entitled to, removing them from the pool so no
+/// later column can re-place them.
+///
+/// A normal column takes at most one window. A `match_all` column keeps claiming
+/// until nothing matches, which is what lets a single slot resize every browser
+/// window instead of only whichever one happened to be on top.
+///
+/// Returned in match order, so the first entry is the window that was topmost.
+pub fn claim_windows(pool: &mut Vec<WindowInfo>, col: &Column) -> Vec<WindowInfo> {
+    let mut claimed = Vec::new();
+    while let Some(win) = match_window(pool, &col.match_rules) {
+        claimed.push(win);
+        if !col.match_all {
+            break;
+        }
+    }
+    claimed
+}
+
 /// Calculate pixel positions for each column in a layout.
 pub fn calculate_slots(
     columns: &[Column],
@@ -613,6 +632,7 @@ mod tests {
         Column {
             width_percent,
             x_percent: None,
+            match_all: false,
             match_rules: Vec::new(),
         }
     }
@@ -622,6 +642,7 @@ mod tests {
         Column {
             width_percent,
             x_percent: Some(x_percent),
+            match_all: false,
             match_rules: Vec::new(),
         }
     }
@@ -664,6 +685,79 @@ mod tests {
         let last = slots.last().unwrap();
         assert_eq!(last.x + last.width, 1920 - gap);
         assert!(slots.iter().all(|s| s.width > 0));
+    }
+
+    /// A column carrying match rules, for the claim tests.
+    fn matching_col(match_all: bool, rules: Vec<MatchRule>) -> Column {
+        Column {
+            width_percent: 30,
+            x_percent: None,
+            match_all,
+            match_rules: rules,
+        }
+    }
+
+    fn title_rule(title: &str) -> MatchRule {
+        MatchRule {
+            title_contains: Some(title.to_string()),
+            process_name: None,
+        }
+    }
+
+    #[test]
+    fn normal_column_claims_only_the_topmost_match() {
+        let mut pool = vec![
+            win(1, "Coat Check - Brave", "brave.exe", false),
+            win(2, "Recipes - Brave", "brave.exe", false),
+            win(3, "Signal", "Signal.exe", false),
+        ];
+        let claimed = claim_windows(&mut pool, &matching_col(false, vec![title_rule("Brave")]));
+        assert_eq!(claimed.len(), 1);
+        assert_eq!(claimed[0].hwnd, 1);
+        // The unclaimed browser window is still available to later columns.
+        assert_eq!(pool.len(), 2);
+    }
+
+    #[test]
+    fn match_all_column_claims_every_match_in_order() {
+        let mut pool = vec![
+            win(1, "Coat Check - Brave", "brave.exe", false),
+            win(2, "Signal", "Signal.exe", false),
+            win(3, "Recipes - Brave", "brave.exe", false),
+            win(4, "Downloads - Brave", "brave.exe", false),
+        ];
+        let claimed = claim_windows(&mut pool, &matching_col(true, vec![title_rule("Brave")]));
+        // Match order is z-order, so the window that was on top comes first —
+        // apply_layout relies on that to keep it on top of its stackmates.
+        assert_eq!(
+            claimed.iter().map(|w| w.hwnd).collect::<Vec<_>>(),
+            vec![1, 3, 4]
+        );
+        // Non-matching windows are untouched.
+        assert_eq!(pool.len(), 1);
+        assert_eq!(pool[0].hwnd, 2);
+    }
+
+    #[test]
+    fn match_all_column_leaves_nothing_for_a_later_duplicate_column() {
+        // Two columns with identical rules: the first is match_all, so the
+        // second must come up empty rather than re-placing a claimed window.
+        let mut pool = vec![
+            win(1, "A - Brave", "brave.exe", false),
+            win(2, "B - Brave", "brave.exe", false),
+        ];
+        let first = claim_windows(&mut pool, &matching_col(true, vec![title_rule("Brave")]));
+        let second = claim_windows(&mut pool, &matching_col(true, vec![title_rule("Brave")]));
+        assert_eq!(first.len(), 2);
+        assert!(second.is_empty());
+    }
+
+    #[test]
+    fn match_all_column_with_no_matches_claims_nothing() {
+        let mut pool = vec![win(1, "Signal", "Signal.exe", false)];
+        let claimed = claim_windows(&mut pool, &matching_col(true, vec![title_rule("Brave")]));
+        assert!(claimed.is_empty());
+        assert_eq!(pool.len(), 1);
     }
 
     #[test]
@@ -790,18 +884,33 @@ pub fn apply_layout(layout_name: &str, layout: &Layout, gap: i32) {
             continue;
         }
 
-        let matched = match_window(&mut available, &col.match_rules);
+        let claimed = claim_windows(&mut available, col);
 
-        if let Some(win) = matched {
-            #[cfg(windows)]
-            {
-                move_window(win.hwnd, slot);
+        if !claimed.is_empty() {
+            for win in &claimed {
+                #[cfg(windows)]
+                {
+                    move_window(win.hwnd, slot);
+                }
+                log::info!(
+                    "Column {}: placed '{}' ({}, hwnd=0x{:x})",
+                    i, win.title, win.process_name, win.hwnd
+                );
             }
-            placed.push(win.hwnd);
-            log::info!(
-                "Column {}: placed '{}' ({}, hwnd=0x{:x})",
-                i, win.title, win.process_name, win.hwnd
-            );
+
+            if claimed.len() > 1 {
+                log::info!(
+                    "Column {}: stacked {} windows at the same position",
+                    i,
+                    claimed.len()
+                );
+            }
+
+            // Reversed so that after the raise pass below the first window
+            // claimed — the one that was already on top — stays on top of its
+            // stackmates, instead of the layout silently promoting a different
+            // browser tab to the front.
+            placed.extend(claimed.iter().rev().map(|w| w.hwnd));
         } else {
             let match_desc: Vec<&str> = col
                 .match_rules
