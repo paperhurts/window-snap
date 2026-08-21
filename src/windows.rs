@@ -599,6 +599,40 @@ mod tests {
         let total: i32 = slots.iter().map(|s| s.width).sum();
         assert_eq!(total, 1920);
     }
+
+    #[test]
+    fn underfull_widths_still_reach_the_screen_edge() {
+        // 40 + 20 = 60%, yet the last column absorbs the slack and the layout
+        // still fills the work area. Widths under 100 are self-correcting, which
+        // is why Config::validate stays quiet about them.
+        let gap = 5;
+        let columns = [col(40), col(20)];
+        let slots = calculate_slots(&columns, &test_monitor(), gap);
+        let last = slots.last().unwrap();
+        assert_eq!(last.x + last.width, 1920 - gap);
+        assert!(slots.iter().all(|s| s.width > 0));
+    }
+
+    #[test]
+    fn overfull_widths_run_off_the_screen_instead_of_overlapping() {
+        // Columns are tiled (x_offset += width + gap), never stacked, so widths
+        // over 100% cannot produce overlap — the excess marches past the right
+        // edge and the last column is handed a negative width. This is the
+        // breakage Config::validate warns about.
+        let gap = 5;
+        let columns = [col(50), col(50), col(50), col(50)]; // 200%
+        let slots = calculate_slots(&columns, &test_monitor(), gap);
+        assert!(
+            slots.iter().any(|s| s.x + s.width > 1920),
+            "expected a column past the right edge: {:?}",
+            slots.iter().map(|s| (s.x, s.width)).collect::<Vec<_>>()
+        );
+        assert!(
+            slots.last().unwrap().width < 0,
+            "expected the last column to get a negative width, got {}",
+            slots.last().unwrap().width
+        );
+    }
 }
 
 /// Apply a layout: match windows to slots and move them.

@@ -1,3 +1,50 @@
+# Testing: Config Validation Warnings (issue #8)
+
+## What Changed
+Branch: `issue-8-validate-layout-widths`. Code change is in `src/config.rs` only.
+
+1. **`Config::validate()`** — on every load and every "Reload Config", WindowSnap now
+   writes a WARN to `~/.windowsnap/windowsnap.log` when a layout is broken:
+   - widths summing **over** 100% (columns tile left-to-right, so the excess runs off
+     the right edge and the last column gets a *negative* width)
+   - a layout with **no columns** (usually a pasted `[[layouts.<name>.columns]]` block
+     that named the wrong layout)
+2. **Under 100% does NOT warn.** The last column stretches to absorb the slack, so the
+   layout still fills the screen. The rule is "stays on screen", not "sums to 100".
+3. **One INFO line per load** showing layout shape up front:
+   `Loaded config: 5 layout(s): 4-column-dev (5 cols), bluestacks (4 cols), ...`
+   This is what would have made the doc-md bug obvious in one glance.
+4. Warnings never block loading — one bad layout must not lock you out of the others.
+5. Config template comments updated with both gotchas. No behavior change to snapping.
+
+## Verification already done
+- `cargo test` — 20 pass (6 new in `config.rs`, 2 new in `windows.rs`).
+  The two `windows.rs` tests prove the engine claims: an underfull layout still reaches
+  the screen edge, and an overfull one produces an off-screen column with negative width.
+- **End-to-end against your real broken config**: ran the new binary with the pre-fix
+  `config.toml` and confirmed the log emitted
+  `WARN ... Layout '4-column-dev' has 8 column(s) whose width_percent sums to 300%`.
+  Your live config was restored immediately afterward (hash-verified identical).
+
+## How to Test
+1. The **old** binary is still running in your tray — this build is at
+   `targeterify
+   `target\verify\release\window-snap.exe` (built to a side directory so it wouldn't
+   have to kill your running instance).
+2. Quit the tray app, then launch the new binary.
+3. Open `%USERPROFILE%\.windowsnap\windowsnap.log` — you should see the `Loaded config:`
+   line listing every layout and its column count, and **no warnings** (your config is
+   currently valid).
+4. To see a warning fire: bump any `width_percent` up by 50, tray → **Reload Config**,
+   and check the log tail.
+
+## Still open
+Your point that a 15%-wide browser is useless is **not solved by this change**. The
+engine cannot overlap windows at all today — see issue #9. Your config widths are
+untouched pending that decision.
+
+---
+
 # Testing: Release Logging + Multi-Match Docs (issues #5, #6)
 
 ## What Changed

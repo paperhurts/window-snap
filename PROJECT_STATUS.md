@@ -24,4 +24,6 @@
   documented — topmost matching window wins, pin with an AND rule (`process_name` + `title_contains`)
 
 ## Open Issues
-- none
+- **#8** (bug) — no validation of `width_percent` sums at config load. A user's copy-pasted
+  `[[layouts.4-column-dev.columns]]` blocks landed on the wrong layout (TOML appends by table
+  name, not file position), making it 8 columns / 300% wide with zero warning. Warn on load.
