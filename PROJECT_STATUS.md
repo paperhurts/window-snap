@@ -30,11 +30,10 @@
   `issue-9-overlap-columns` (stacked on #8), awaiting user test confirmation before push.
   Deferred within #9: `y_percent`/`height_percent`, and explicit z-order control
   (z-order currently follows config order).
-- **#10** (enhancement) — a column places only one matching window; the rest are
-  ignored. Surfaced by `chat-browse` resizing only the topmost of 5 Brave windows.
-  Documented behaviour (#5), but keeps surprising. Proposal: opt-in `match_all` that
-  stacks every match into the slot, now practical because #9 landed. Not started —
-  awaiting a decision on stack-vs-cascade.
+- **#10** (enhancement) — `match_all` places every matching window in a column,
+  stacked at identical geometry. **Implemented**, branch `issue-10-match-all`
+  (stacked on #9), awaiting user test confirmation before push. Exact stacking was
+  the user's call over cascade.
 
 ## In Flight (2026-08-21)
 - **Config validation (#8)**: `Config::validate()` warns at load/reload when a layout
@@ -47,7 +46,7 @@
   Absolute columns consume no gap, do not shift neighbours, and may overlap. Z-order
   is applied in column order (last declared on top) only for layouts that use the
   field. Fully backward compatible.
-- Tests: 12 → 28.
+- Tests: 12 → 33.
 - User's live config rewritten twice today; backups at `config.toml.pre-docmd-fix`
   and `config.toml.pre-overlap`.
 
@@ -57,3 +56,9 @@
   yields 616px. Not a WindowSnap bug; size its column accordingly.
 - `SetWindowPos` in `move_window` passes `SWP_NOZORDER`, so moving a window never
   changes stacking. Overlap support needed a separate raise pass.
+
+## Config Gotcha Worth Remembering
+`match_all` amplifies loose match rules. The user's browser columns carried a
+`{ title_contains = "Notepad" }` fallback that was harmless under one-window-per-column
+and swept every Notepad/Notepad++ window into the browser slot once match_all was on.
+Removed from their config; documented in README and the config template.

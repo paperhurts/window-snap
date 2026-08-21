@@ -1,3 +1,67 @@
+# Testing: match_all — place every matching window (issue #10)
+
+## What Changed
+Branch: `issue-10-match-all` (stacked on #9). Not pushed.
+
+A column claimed exactly one window, so with five browser windows open only the
+topmost got resized — and which one that was depended on what you had clicked last.
+A column with **`match_all = true`** now claims every match and stacks them at the
+same position. They are stacked, not tiled: each gets the column's full width. The
+window that was already on top stays on top; alt-tab between them as usual.
+
+## Your config was updated (backup: `~/.windowsnap/config.toml.pre-matchall`)
+`match_all = true` added to the **browser** and **terminal/editor** columns in
+4-column-dev, dev-lite, chat-browse, and claude-cli. Deliberately NOT added to:
+- **Signal / Claude / doc-md columns** — single windows, nothing to stack.
+- **bluestacks** — its four repeated columns are meant to place four instances
+  side by side. `match_all` would stack them into one slot instead.
+
+## One thing I had to fix while testing — worth knowing
+Your browser columns carried a `{ title_contains = "Notepad" }` fallback (probably
+so the slot was never empty). Harmless when only one window was placed. With
+`match_all` it dragged **every Notepad and Notepad++ window into the browser slot** —
+7 windows stacked instead of 5. I removed that fallback from the browser and
+terminal columns.
+
+The general rule, now in the README: **`match_all` amplifies loose rules.** Before
+switching it on for a column, read its match list and ask what else could match.
+
+## How to Test
+1. Quit the window-snap you currently have running — it is the **older** verify
+   build and does not understand `match_all` (it ignores the field silently).
+2. Launch `target\verify2\release\window-snap.exe`.
+3. Drag three or four browser windows to random positions and sizes.
+4. Press **Ctrl+Alt+3** (chat-browse). Expect: *all* of them snap to the browser
+   column, same position and size, with the one you were last using still in front.
+5. Check `%USERPROFILE%\.windowsnap\windowsnap.log` for
+   `Column 3: stacked N windows at the same position` and one `placed` line per window.
+6. Press **Ctrl+Alt+4** (bluestacks) to confirm the repeated-column behaviour is
+   untouched — those still spread across four slots rather than stacking.
+
+## Already verified end-to-end
+Scattered five browser windows to separate positions, applied chat-browse, and read
+the rectangles back:
+
+```
+BEFORE  x=  60 w=700   how to i create a command like 'dev'...
+        x= 150 w=700   Coat Check - Brave
+        x= 240 w=700   My Downloads - Video Game Music - Brave
+        x= 330 w=700   Creamy White Chili Recipe - Brave
+        x= 420 w=700   The Secret World: Solomon Island - Chrome
+AFTER   all five at x=1787 w=775
+```
+
+33 tests pass, including one asserting `match_all` defaults to false so every
+existing config keeps placing one window per column.
+
+## Note on the build directories
+`target\release` is locked by whatever is running, so these builds went to
+`target\verify` (older) and `target\verify2` (current). Once you quit the running
+instance, a normal `cargo build --release` will put it back in `target\release`
+and you can delete both verify directories.
+
+---
+
 # Testing: Overlapping Windows (issue #9)
 
 ## What Changed
