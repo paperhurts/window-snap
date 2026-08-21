@@ -1,3 +1,59 @@
+# Testing: Overlapping Windows (issue #9)
+
+## What Changed
+Branch: `issue-9-overlap-columns` (builds on the #8 branch). Not pushed.
+
+Columns could only ever tile — each starting where the last ended — so every extra
+column made everything narrower, and widths over 100% ran off screen rather than
+overlapping. A column can now carry **`x_percent`**, which pins it to an absolute
+position instead. Absolute columns sit outside the tiling flow: they do not consume
+a gap, do not shift their neighbours, and may overlap them. Columns declared later
+are stacked on top. **A layout with no `x_percent` behaves exactly as before.**
+
+## Your config was rewritten (backup: `~/.windowsnap/config.toml.pre-overlap`)
+`4-column-dev` (Ctrl+Alt+1) is now, based on your answer that doc-md, the browser,
+and the terminal/editor are what you need readable at once:
+
+| Column | Width | Actual px |
+| --- | --- | --- |
+| doc-md | 40% tiled | 1030 |
+| VS Code **or** terminal (whichever is open) | 30% tiled | 776 |
+| Browser | 30% tiled | 776 |
+| Claude | `x_percent = 0`, 24% — **laid on top of doc-md** | 616 |
+
+Your browser went from ~380px to 776px. Claude no longer costs a column.
+The other four layouts are unchanged (still pure tiling) so you can compare.
+
+## Two things I measured that you should know
+- **Your monitor is 2560 wide**, not 1920. Earlier percentages I quoted were off.
+- **The Claude app enforces a ~616px minimum width.** I asked for 255px and got 616.
+  That is Claude, not WindowSnap. Its column is set to 24% so the config asks for
+  what it will actually get. It also means Claude covers ~60% of doc-md when
+  stacked — if that bothers you, move it with `x_percent` or drop it from the layout.
+
+## How to Test
+1. Quit the WindowSnap in your tray (it is still the old build).
+2. Launch `target\verify\release\window-snap.exe`.
+3. Press **Ctrl+Alt+1**. Expect: doc-md wide on the left, terminal/VS Code and the
+   browser each ~776px, and Claude sitting on top of doc-md's left edge.
+4. Press **Ctrl+Alt+2** (dev-lite) for the old pure-tiled behaviour to compare.
+5. Check `%USERPROFILE%\.windowsnap\windowsnap.log` — you should see
+   `Layout '4-column-dev' has absolute columns: stacked 4 window(s) in column order`
+   and no WARN lines.
+
+## Already verified end-to-end
+Ran the build on a spare hotkey so it would not fight your running instance, then
+read back the real window rectangles: Claude spans -2..614 while doc-md spans
+-2..1028, so the overlap is real and every tiled column kept its full width.
+28 tests pass, including one that proves a layout without `x_percent` is unchanged.
+
+## To tune it
+`x_percent` is the left edge, `width_percent` the width, both percentages of the
+screen. Keep their sum at or under 100 or the column hangs off the right edge
+(WindowSnap warns in the log if it does). Tray -> Reload Config to apply.
+
+---
+
 # Testing: Config Validation Warnings (issue #8)
 
 ## What Changed

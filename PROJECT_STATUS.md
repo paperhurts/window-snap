@@ -24,6 +24,31 @@
   documented — topmost matching window wins, pin with an AND rule (`process_name` + `title_contains`)
 
 ## Open Issues
-- **#8** (bug) — no validation of `width_percent` sums at config load. A user's copy-pasted
-  `[[layouts.4-column-dev.columns]]` blocks landed on the wrong layout (TOML appends by table
-  name, not file position), making it 8 columns / 300% wide with zero warning. Warn on load.
+- **#8** (bug) — config validation. **Implemented**, branch `issue-8-validate-layout-widths`,
+  awaiting user test confirmation before push.
+- **#9** (enhancement) — overlapping windows via `x_percent`. **Implemented**, branch
+  `issue-9-overlap-columns` (stacked on #8), awaiting user test confirmation before push.
+  Deferred within #9: `y_percent`/`height_percent`, and explicit z-order control
+  (z-order currently follows config order).
+
+## In Flight (2026-08-21)
+- **Config validation (#8)**: `Config::validate()` warns at load/reload when a layout
+  cannot fit on screen — tiled widths summing >100, absolute columns running past the
+  right edge, or a layout with no columns. Plus one INFO line per load listing every
+  layout and its column count. Warnings never block loading. The rule is deliberately
+  "stays on screen", **not** "sums to 100": under 100 is fine because the last tiled
+  column absorbs the slack.
+- **Overlap (#9)**: `Column.x_percent` places a column absolutely instead of tiling.
+  Absolute columns consume no gap, do not shift neighbours, and may overlap. Z-order
+  is applied in column order (last declared on top) only for layouts that use the
+  field. Fully backward compatible.
+- Tests: 12 → 28.
+- User's live config rewritten twice today; backups at `config.toml.pre-docmd-fix`
+  and `config.toml.pre-overlap`.
+
+## Measured Environment Facts (2026-08-21)
+- Primary monitor work area is **2560** wide (earlier notes assuming 1920 were wrong).
+- The **Claude desktop app clamps itself to ~616px minimum width** — requesting 255px
+  yields 616px. Not a WindowSnap bug; size its column accordingly.
+- `SetWindowPos` in `move_window` passes `SWP_NOZORDER`, so moving a window never
+  changes stacking. Overlap support needed a separate raise pass.
