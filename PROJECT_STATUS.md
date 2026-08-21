@@ -30,6 +30,11 @@
   `issue-9-overlap-columns` (stacked on #8), awaiting user test confirmation before push.
   Deferred within #9: `y_percent`/`height_percent`, and explicit z-order control
   (z-order currently follows config order).
+- **#10** (enhancement) — a column places only one matching window; the rest are
+  ignored. Surfaced by `chat-browse` resizing only the topmost of 5 Brave windows.
+  Documented behaviour (#5), but keeps surprising. Proposal: opt-in `match_all` that
+  stacks every match into the slot, now practical because #9 landed. Not started —
+  awaiting a decision on stack-vs-cascade.
 
 ## In Flight (2026-08-21)
 - **Config validation (#8)**: `Config::validate()` warns at load/reload when a layout
