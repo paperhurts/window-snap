@@ -40,6 +40,14 @@ pub struct Layout {
 pub struct Column {
     #[serde(default)]
     pub width_percent: u32,
+    /// Optional absolute left edge, as a percentage of the work area.
+    ///
+    /// When set, the column is positioned at that offset instead of flowing
+    /// after its predecessor, which is what makes overlap expressible. Absolute
+    /// columns sit outside the tiling flow entirely: they neither consume gaps
+    /// nor shift their neighbours. Omit it and the column tiles exactly as
+    /// before.
+    pub x_percent: Option<u32>,
     #[serde(default, rename = "match")]
     pub match_rules: Vec<MatchRule>,
 }
@@ -94,11 +102,10 @@ impl Config {
     /// layout name (layouts live in a HashMap, so unsorted output would shuffle
     /// between runs and make log diffs useless).
     ///
-    /// The only width rule that matters is "stays on screen". `calculate_slots`
-    /// tiles columns left to right, so widths summing UNDER 100 are fine — the
-    /// last column stretches to absorb the slack. Over 100 is always broken:
-    /// later columns march off the right edge and the last one is handed a
-    /// negative width.
+    /// The only rule that matters is "stays on screen", never "sums to 100".
+    /// Tiled widths summing UNDER 100 are fine — the last tiled column stretches
+    /// to absorb the slack. Over 100 is always broken: later columns march off
+    /// the right edge and the last is handed a negative width.
     ///
     /// These are warnings, never errors. Refusing to load the config over one
     /// bad layout would lock the user out of every *other* layout too.
@@ -106,42 +113,72 @@ impl Config {
         let mut warnings: Vec<String> = self
             .layouts
             .iter()
-            .filter_map(|(name, layout)| {
-                if layout.columns.is_empty() {
-                    return Some(format!(
-                        concat!(
-                            "Layout '{name}' has no columns, so its hotkey will do nothing. ",
-                            "Note that [[layouts.<name>.columns]] appends to <name> no matter ",
-                            "where the block sits in the file - check whether the column ",
-                            "blocks you meant for this layout are naming a different one.",
-                        ),
-                        name = name
-                    ));
-                }
-                // saturating: a nonsense width shouldn't panic a debug build.
-                let sum = layout
-                    .columns
-                    .iter()
-                    .fold(0u32, |acc, c| acc.saturating_add(c.width_percent));
-                if sum > 100 {
-                    let count = layout.columns.len();
-                    return Some(format!(
-                        concat!(
-                            "Layout '{name}' has {count} column(s) whose width_percent sums ",
-                            "to {sum}%. Columns are tiled left to right, so anything over 100% ",
-                            "runs off the right edge of the screen instead of overlapping - ",
-                            "the last column ends up with a negative width. If you pasted a ",
-                            "column block in, check that it names the right layout.",
-                        ),
-                        name = name,
-                        count = count,
-                        sum = sum
-                    ));
-                }
-                None
-            })
+            .flat_map(|(name, layout)| Self::layout_warnings(name, layout))
             .collect();
         warnings.sort();
+        warnings
+    }
+
+    /// Every on-screen problem found in one layout. A layout can have more than
+    /// one, so this returns a list rather than the first hit.
+    fn layout_warnings(name: &str, layout: &Layout) -> Vec<String> {
+        if layout.columns.is_empty() {
+            return vec![format!(
+                concat!(
+                    "Layout '{name}' has no columns, so its hotkey will do nothing. ",
+                    "Note that [[layouts.<name>.columns]] appends to <name> no matter ",
+                    "where the block sits in the file - check whether the column ",
+                    "blocks you meant for this layout are naming a different one.",
+                ),
+                name = name
+            )];
+        }
+
+        let mut warnings = Vec::new();
+
+        // Absolutely positioned columns stand alone: each one either fits within
+        // the work area or hangs off the right edge, regardless of its siblings.
+        for (i, col) in layout.columns.iter().enumerate() {
+            let Some(x) = col.x_percent else { continue };
+            // saturating: a nonsense value shouldn't panic a debug build.
+            let right_edge = x.saturating_add(col.width_percent);
+            if right_edge > 100 {
+                warnings.push(format!(
+                    concat!(
+                        "Layout '{name}' column {i} sits at x_percent {x} with width_percent ",
+                        "{width}, so it ends at {right_edge}% and runs off the right edge of ",
+                        "the screen. Keep x_percent + width_percent at or under 100.",
+                    ),
+                    name = name,
+                    i = i,
+                    x = x,
+                    width = col.width_percent,
+                    right_edge = right_edge
+                ));
+            }
+        }
+
+        // Only the tiled columns share the row between them; absolute ones sit
+        // outside the flow and must not count toward the total.
+        let tiled = layout.columns.iter().filter(|c| c.x_percent.is_none());
+        let count = tiled.clone().count();
+        let sum = tiled.fold(0u32, |acc, c| acc.saturating_add(c.width_percent));
+        if sum > 100 {
+            warnings.push(format!(
+                concat!(
+                    "Layout '{name}' has {count} tiled column(s) whose width_percent sums ",
+                    "to {sum}%. Tiled columns are laid out left to right, never stacked, so ",
+                    "anything over 100% runs off the right edge of the screen instead of ",
+                    "overlapping - the last one ends up with a negative width. Give a column ",
+                    "an x_percent if you actually want it to overlap, and if you pasted a ",
+                    "column block in, check that it names the right layout.",
+                ),
+                name = name,
+                count = count,
+                sum = sum
+            ));
+        }
+
         warnings
     }
 
@@ -188,8 +225,9 @@ const DEFAULT_CONFIG: &str = r#"# WindowSnap Configuration
 #     piles onto the original layout.
 #  2. width_percent values are literal percentages of the monitor and are never
 #     normalized. Under 100 is fine — the last column stretches to fill the gap.
-#     OVER 100 is broken: columns are tiled left to right, never stacked, so the
-#     excess marches off the right edge of the screen rather than overlapping.
+#     OVER 100 is broken: columns tile left to right, so the excess marches off
+#     the right edge of the screen. If you want windows to OVERLAP rather than
+#     tile, give them an x_percent — see "OVERLAPPING WINDOWS" at the bottom.
 # WindowSnap warns about both in ~/.windowsnap/windowsnap.log when it loads.
 
 [settings]
@@ -295,9 +333,34 @@ match = [{ process_name = "HD-Player.exe" }]
 # specific window (e.g. a terminal you renamed after your project).
 # Empty match = [] means "skip this slot".
 #
+# ─── OVERLAPPING WINDOWS ───
+#
+# By default columns TILE: each one starts where the previous ended, so more
+# columns always means narrower windows. On a single monitor that runs out fast
+# — five columns leaves every window too narrow to use.
+#
+# Add x_percent to a column to place it at an absolute position instead. It then
+# sits outside the tiling flow: it does not shift its neighbours, and it may
+# overlap them. Columns declared LATER are stacked on top.
+#
+# [[layouts.focus.columns]]
+# width_percent = 45              # tiled as usual
+# match = [{ process_name = "doc-md.exe" }]
+#
+# [[layouts.focus.columns]]
+# width_percent = 55              # tiled, fills the rest of the row
+# match = [{ title_contains = "Brave" }]
+#
+# [[layouts.focus.columns]]
+# x_percent = 0                   # absolute: pinned to the left edge...
+# width_percent = 22              # ...and laid ON TOP of the two above
+# match = [{ title_contains = "Claude" }]
+#
+# Rule of thumb: x_percent + width_percent should stay at or under 100, or the
+# column hangs off the right edge. WindowSnap warns in the log if it does.
+#
 # Remember: the layout name in [[layouts.<name>.columns]] is what decides which
-# layout a column joins — not where you paste it. And keep each layout's
-# width_percent adding up to 100.
+# layout a column joins — not where you paste it.
 "#;
 
 #[cfg(test)]
@@ -381,6 +444,56 @@ width_percent = 50
             r#"
 [[layouts.sparse.columns]]
 width_percent = 40
+"#,
+        );
+        assert_eq!(config.validate(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn absolute_column_running_past_the_right_edge_warns() {
+        let config = parse(
+            r#"
+[[layouts.spill.columns]]
+x_percent = 70
+width_percent = 50
+"#,
+        );
+        let warnings = config.validate();
+        assert_eq!(warnings.len(), 1, "expected one warning, got {:?}", warnings);
+        assert!(warnings[0].contains("120"), "{}", warnings[0]);
+        assert!(warnings[0].contains("x_percent"), "{}", warnings[0]);
+    }
+
+    #[test]
+    fn overlapping_absolute_columns_are_not_a_problem() {
+        // Two windows deliberately sharing the middle of the screen. Both fit,
+        // so there is nothing to warn about even though they sum to 115%.
+        let config = parse(
+            r#"
+[[layouts.overlap.columns]]
+x_percent = 0
+width_percent = 60
+[[layouts.overlap.columns]]
+x_percent = 45
+width_percent = 55
+"#,
+        );
+        assert_eq!(config.validate(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn absolute_columns_are_excluded_from_the_tiled_sum() {
+        // The tiled columns fill the row exactly; the absolute one sits on top of
+        // them. Counting it toward the total would produce a bogus warning.
+        let config = parse(
+            r#"
+[[layouts.mixed.columns]]
+width_percent = 40
+[[layouts.mixed.columns]]
+width_percent = 60
+[[layouts.mixed.columns]]
+x_percent = 0
+width_percent = 25
 "#,
         );
         assert_eq!(config.validate(), Vec::<String>::new());
