@@ -61,6 +61,42 @@ width_percent = 60
 match = [{ title_contains = "Chrome" }]
 ```
 
+### Overlapping Windows
+
+By default columns **tile**: each starts where the previous one ended, so adding a
+column always makes every window narrower. On a single monitor that runs out fast —
+five columns leaves nothing wide enough to read.
+
+Give a column an `x_percent` to place it at an absolute position instead. It then sits
+outside the tiling flow: it does not shift its neighbours, and it may overlap them.
+Columns declared **later** are stacked on top.
+
+```toml
+[[layouts.focus.columns]]
+width_percent = 45              # tiled as usual
+match = [{ process_name = "doc-md.exe" }]
+
+[[layouts.focus.columns]]
+width_percent = 55              # tiled, fills the rest of the row
+match = [{ title_contains = "Brave" }]
+
+[[layouts.focus.columns]]
+x_percent = 0                   # absolute: pinned to the left edge...
+width_percent = 22              # ...and laid on top of the two above
+match = [{ title_contains = "Claude" }]
+```
+
+Widths are literal percentages of the work area and are never normalized:
+
+| Layout | Result |
+| --- | --- |
+| Tiled widths sum **under** 100 | Fine — the last tiled column stretches to fill the row. |
+| Tiled widths sum **over** 100 | Broken — the excess runs off the right edge and the last column gets a negative width. This does *not* produce overlap. |
+| `x_percent + width_percent` over 100 | That column hangs off the right edge. |
+
+WindowSnap warns about all three in the log when it loads the config, and never
+refuses to load — one bad layout must not lock you out of the others.
+
 ### Window Matching
 
 Each column has `match` rules that find windows by title, process name, or both:
@@ -87,13 +123,41 @@ Common ones: `WindowsTerminal.exe`, `powershell.exe`, `pwsh.exe`, `cmd.exe`,
 
 ### When Several Windows Match
 
-A column places exactly one window. If several windows match (say five terminals
-and one terminal slot), the **topmost matching window** wins — roughly the one you
-used most recently — preferring non-minimized windows. Re-applying a layout can
-therefore pick a different terminal than last time.
+By default a column places exactly one window. If several windows match (say five
+terminals and one terminal slot), the **topmost matching window** wins — roughly the
+one you used most recently — preferring non-minimized windows. Re-applying a layout
+can therefore pick a different terminal than last time.
 
-To deterministically pin one specific window, combine process and title in a
-single AND rule and list it first:
+Three ways to change that:
+
+**Place them all.** Set `match_all = true` and the column claims every matching
+window, stacking them at the same position so each gets the column's full width:
+
+```toml
+[[layouts.dev.columns]]
+width_percent = 30
+match_all = true
+match = [{ title_contains = "Brave" }]
+```
+
+They are stacked, not tiled — the goal is "size all my browser windows the same",
+not "show them all at once". Whichever was on top stays on top; alt-tab between
+them as usual. Claimed windows leave the pool, so a later column with the same
+rules finds nothing.
+
+> **`match_all` amplifies loose rules.** A broad fallback that was harmless when
+> only one window got placed will sweep up everything once the column claims all
+> matches. A browser column with a `{ title_contains = "Notepad" }` fallback, added
+> so the slot was never empty, will pull every Notepad window into the browser slot.
+> Check a column's rules before turning `match_all` on, and prefer `process_name`.
+
+**Spread them across slots.** Repeat the column *without* `match_all`; each repeat
+claims the next match. The `bluestacks` layout in the default config does this for
+four emulator instances.
+
+**Pin one specific window.**
+
+Combine process and title in a single AND rule and list it first:
 
 ```toml
 match = [
@@ -125,6 +189,10 @@ Use the "Start with Windows" toggle in the tray menu. This adds/removes a regist
 - Release build (no console window): logs go to `~/.windowsnap/windowsnap.log`,
   including which window was matched and placed for every column. The file rotates
   once at 512 KB (previous log kept as `windowsnap.log.1`), so it stays under ~1 MB.
+- Every load and every "Reload Config" logs one line summarising each layout and its
+  column count, followed by a warning for any layout whose columns cannot fit on
+  screen. If a layout is not doing what you expect, read that first — a column block
+  pasted under the wrong `[[layouts.<name>.columns]]` header shows up here immediately.
 
 ## Troubleshooting
 

@@ -310,6 +310,25 @@ pub fn match_window(
     None
 }
 
+/// Claim the windows a column is entitled to, removing them from the pool so no
+/// later column can re-place them.
+///
+/// A normal column takes at most one window. A `match_all` column keeps claiming
+/// until nothing matches, which is what lets a single slot resize every browser
+/// window instead of only whichever one happened to be on top.
+///
+/// Returned in match order, so the first entry is the window that was topmost.
+pub fn claim_windows(pool: &mut Vec<WindowInfo>, col: &Column) -> Vec<WindowInfo> {
+    let mut claimed = Vec::new();
+    while let Some(win) = match_window(pool, &col.match_rules) {
+        claimed.push(win);
+        if !col.match_all {
+            break;
+        }
+    }
+    claimed
+}
+
 /// Calculate pixel positions for each column in a layout.
 pub fn calculate_slots(
     columns: &[Column],
@@ -324,27 +343,52 @@ pub fn calculate_slots(
     let total_width = work_right - work_left;
     let total_height = work_bottom - work_top;
 
-    let num_columns = columns.len() as i32;
-    let total_gap_width = gap * (num_columns + 1);
-    let usable_width = total_width - total_gap_width;
+    // Columns carrying an explicit x_percent are placed absolutely and sit
+    // outside the tiling flow: they neither consume gaps nor shift their
+    // neighbours. Gap budgeting and the remainder rule below therefore run over
+    // the tiled columns alone, which keeps a layout with no x_percent byte-for-
+    // byte identical to the old behaviour.
+    let tiled_count = columns.iter().filter(|c| c.x_percent.is_none()).count() as i32;
+    let usable_width = total_width - gap * (tiled_count + 1);
 
-    let mut slots = Vec::new();
+    // Absolute columns measure against the full work area (minus the outer gaps)
+    // so that x_percent = 0 means "flush left" and width_percent = 100 means
+    // "full width", no matter how many other columns the layout has.
+    let absolute_span = total_width - (2 * gap);
+
+    // The remainder rule targets the last *tiled* column, which is not
+    // necessarily the last column in the layout.
+    let last_tiled = columns.iter().rposition(|c| c.x_percent.is_none());
+
+    let y = work_top + gap;
+    let height = total_height - (2 * gap);
+
+    let mut slots = Vec::with_capacity(columns.len());
     let mut x_offset = work_left + gap;
 
     for (i, col) in columns.iter().enumerate() {
-        let pct = col.width_percent as i32;
-        let mut col_width = usable_width * pct / 100;
+        if let Some(x_pct) = col.x_percent {
+            slots.push(LayoutSlot {
+                x: work_left + gap + absolute_span * x_pct as i32 / 100,
+                width: absolute_span * col.width_percent as i32 / 100,
+                y,
+                height,
+            });
+            continue;
+        }
 
-        // Last column absorbs rounding remainder
-        if i == columns.len() - 1 {
+        let mut col_width = usable_width * col.width_percent as i32 / 100;
+
+        // Last tiled column absorbs rounding remainder
+        if Some(i) == last_tiled {
             col_width = (work_right - gap) - x_offset;
         }
 
         slots.push(LayoutSlot {
             x: x_offset,
-            y: work_top + gap,
+            y,
             width: col_width,
-            height: total_height - (2 * gap),
+            height,
         });
 
         x_offset += col_width + gap;
@@ -428,6 +472,24 @@ fn move_window(hwnd_val: isize, slot: &LayoutSlot) -> bool {
             log::warn!("Failed to move window hwnd={}", hwnd_val);
             false
         }
+    }
+}
+
+/// Bring a window to the top of the z-order without moving, resizing, or
+/// focusing it. Used to stack overlapping columns in the order the config
+/// declares them.
+#[cfg(windows)]
+fn raise_window(hwnd_val: isize) {
+    unsafe {
+        let _ = SetWindowPos(
+            HWND(hwnd_val as *mut _),
+            HWND_TOP,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        );
     }
 }
 
@@ -569,6 +631,18 @@ mod tests {
     fn col(width_percent: u32) -> Column {
         Column {
             width_percent,
+            x_percent: None,
+            match_all: false,
+            match_rules: Vec::new(),
+        }
+    }
+
+    /// A column pinned to an absolute left edge, outside the tiling flow.
+    fn abs_col(x_percent: u32, width_percent: u32) -> Column {
+        Column {
+            width_percent,
+            x_percent: Some(x_percent),
+            match_all: false,
             match_rules: Vec::new(),
         }
     }
@@ -598,6 +672,170 @@ mod tests {
         let slots = calculate_slots(&columns, &test_monitor(), gap);
         let total: i32 = slots.iter().map(|s| s.width).sum();
         assert_eq!(total, 1920);
+    }
+
+    #[test]
+    fn underfull_widths_still_reach_the_screen_edge() {
+        // 40 + 20 = 60%, yet the last column absorbs the slack and the layout
+        // still fills the work area. Widths under 100 are self-correcting, which
+        // is why Config::validate stays quiet about them.
+        let gap = 5;
+        let columns = [col(40), col(20)];
+        let slots = calculate_slots(&columns, &test_monitor(), gap);
+        let last = slots.last().unwrap();
+        assert_eq!(last.x + last.width, 1920 - gap);
+        assert!(slots.iter().all(|s| s.width > 0));
+    }
+
+    /// A column carrying match rules, for the claim tests.
+    fn matching_col(match_all: bool, rules: Vec<MatchRule>) -> Column {
+        Column {
+            width_percent: 30,
+            x_percent: None,
+            match_all,
+            match_rules: rules,
+        }
+    }
+
+    fn title_rule(title: &str) -> MatchRule {
+        MatchRule {
+            title_contains: Some(title.to_string()),
+            process_name: None,
+        }
+    }
+
+    #[test]
+    fn normal_column_claims_only_the_topmost_match() {
+        let mut pool = vec![
+            win(1, "Coat Check - Brave", "brave.exe", false),
+            win(2, "Recipes - Brave", "brave.exe", false),
+            win(3, "Signal", "Signal.exe", false),
+        ];
+        let claimed = claim_windows(&mut pool, &matching_col(false, vec![title_rule("Brave")]));
+        assert_eq!(claimed.len(), 1);
+        assert_eq!(claimed[0].hwnd, 1);
+        // The unclaimed browser window is still available to later columns.
+        assert_eq!(pool.len(), 2);
+    }
+
+    #[test]
+    fn match_all_column_claims_every_match_in_order() {
+        let mut pool = vec![
+            win(1, "Coat Check - Brave", "brave.exe", false),
+            win(2, "Signal", "Signal.exe", false),
+            win(3, "Recipes - Brave", "brave.exe", false),
+            win(4, "Downloads - Brave", "brave.exe", false),
+        ];
+        let claimed = claim_windows(&mut pool, &matching_col(true, vec![title_rule("Brave")]));
+        // Match order is z-order, so the window that was on top comes first —
+        // apply_layout relies on that to keep it on top of its stackmates.
+        assert_eq!(
+            claimed.iter().map(|w| w.hwnd).collect::<Vec<_>>(),
+            vec![1, 3, 4]
+        );
+        // Non-matching windows are untouched.
+        assert_eq!(pool.len(), 1);
+        assert_eq!(pool[0].hwnd, 2);
+    }
+
+    #[test]
+    fn match_all_column_leaves_nothing_for_a_later_duplicate_column() {
+        // Two columns with identical rules: the first is match_all, so the
+        // second must come up empty rather than re-placing a claimed window.
+        let mut pool = vec![
+            win(1, "A - Brave", "brave.exe", false),
+            win(2, "B - Brave", "brave.exe", false),
+        ];
+        let first = claim_windows(&mut pool, &matching_col(true, vec![title_rule("Brave")]));
+        let second = claim_windows(&mut pool, &matching_col(true, vec![title_rule("Brave")]));
+        assert_eq!(first.len(), 2);
+        assert!(second.is_empty());
+    }
+
+    #[test]
+    fn match_all_column_with_no_matches_claims_nothing() {
+        let mut pool = vec![win(1, "Signal", "Signal.exe", false)];
+        let claimed = claim_windows(&mut pool, &matching_col(true, vec![title_rule("Brave")]));
+        assert!(claimed.is_empty());
+        assert_eq!(pool.len(), 1);
+    }
+
+    #[test]
+    fn absolute_column_is_positioned_at_its_x_percent() {
+        let gap = 5;
+        // 1920 wide, minus the two outer gaps, leaves a 1910px span to measure against.
+        let slots = calculate_slots(&[abs_col(50, 25)], &test_monitor(), gap);
+        assert_eq!(slots[0].x, gap + 1910 / 2);
+        assert_eq!(slots[0].width, 1910 / 4);
+    }
+
+    #[test]
+    fn absolute_columns_may_overlap() {
+        // The point of the feature: two windows both wide enough to use, sharing
+        // the middle of the screen. Tiling cannot express this.
+        let slots = calculate_slots(&[abs_col(0, 60), abs_col(45, 55)], &test_monitor(), 5);
+        let (a, b) = (&slots[0], &slots[1]);
+        assert!(
+            b.x < a.x + a.width,
+            "expected overlap: first ends at {}, second starts at {}",
+            a.x + a.width,
+            b.x
+        );
+        // Both keep their full requested width — neither is squeezed by the other.
+        assert_eq!(a.width, 1910 * 60 / 100);
+        assert_eq!(b.width, 1910 * 55 / 100);
+    }
+
+    #[test]
+    fn absolute_columns_do_not_disturb_tiled_neighbours() {
+        // Mixed layout: the tiled columns must land exactly where they would if
+        // the absolute one were not in the list at all.
+        let monitor = test_monitor();
+        let tiled_only = calculate_slots(&[col(30), col(70)], &monitor, 5);
+        let mixed = calculate_slots(&[col(30), abs_col(10, 40), col(70)], &monitor, 5);
+
+        assert_eq!((mixed[0].x, mixed[0].width), (tiled_only[0].x, tiled_only[0].width));
+        assert_eq!((mixed[2].x, mixed[2].width), (tiled_only[1].x, tiled_only[1].width));
+    }
+
+    #[test]
+    fn last_tiled_column_absorbs_remainder_even_when_an_absolute_column_follows() {
+        // The remainder rule targets the last *tiled* column, not the last column.
+        let gap = 5;
+        let slots = calculate_slots(&[col(50), col(50), abs_col(0, 30)], &test_monitor(), gap);
+        assert_eq!(slots[1].x + slots[1].width, 1920 - gap);
+    }
+
+    #[test]
+    fn layout_without_x_percent_is_unchanged() {
+        // Backward compatibility: the new field must not shift existing layouts.
+        let monitor = test_monitor();
+        let columns = [col(25), col(25), col(25), col(25)];
+        let slots = calculate_slots(&columns, &monitor, 5);
+        assert_eq!(slots[0].x, 5);
+        assert_eq!(slots.last().unwrap().x + slots.last().unwrap().width, 1920 - 5);
+        assert!(slots.windows(2).all(|w| w[1].x >= w[0].x + w[0].width));
+    }
+
+    #[test]
+    fn overfull_widths_run_off_the_screen_instead_of_overlapping() {
+        // Columns are tiled (x_offset += width + gap), never stacked, so widths
+        // over 100% cannot produce overlap — the excess marches past the right
+        // edge and the last column is handed a negative width. This is the
+        // breakage Config::validate warns about.
+        let gap = 5;
+        let columns = [col(50), col(50), col(50), col(50)]; // 200%
+        let slots = calculate_slots(&columns, &test_monitor(), gap);
+        assert!(
+            slots.iter().any(|s| s.x + s.width > 1920),
+            "expected a column past the right edge: {:?}",
+            slots.iter().map(|s| (s.x, s.width)).collect::<Vec<_>>()
+        );
+        assert!(
+            slots.last().unwrap().width < 0,
+            "expected the last column to get a negative width, got {}",
+            slots.last().unwrap().width
+        );
     }
 }
 
@@ -637,23 +875,42 @@ pub fn apply_layout(layout_name: &str, layout: &Layout, gap: i32) {
         monitor_idx
     );
 
+    // Tracked in column order so overlapping layouts can be stacked afterwards.
+    let mut placed: Vec<isize> = Vec::new();
+
     for (i, (col, slot)) in layout.columns.iter().zip(slots.iter()).enumerate() {
         if col.match_rules.is_empty() {
             log::debug!("Column {}: no match rules, skipping", i);
             continue;
         }
 
-        let matched = match_window(&mut available, &col.match_rules);
+        let claimed = claim_windows(&mut available, col);
 
-        if let Some(win) = matched {
-            #[cfg(windows)]
-            {
-                move_window(win.hwnd, slot);
+        if !claimed.is_empty() {
+            for win in &claimed {
+                #[cfg(windows)]
+                {
+                    move_window(win.hwnd, slot);
+                }
+                log::info!(
+                    "Column {}: placed '{}' ({}, hwnd=0x{:x})",
+                    i, win.title, win.process_name, win.hwnd
+                );
             }
-            log::info!(
-                "Column {}: placed '{}' ({}, hwnd=0x{:x})",
-                i, win.title, win.process_name, win.hwnd
-            );
+
+            if claimed.len() > 1 {
+                log::info!(
+                    "Column {}: stacked {} windows at the same position",
+                    i,
+                    claimed.len()
+                );
+            }
+
+            // Reversed so that after the raise pass below the first window
+            // claimed — the one that was already on top — stays on top of its
+            // stackmates, instead of the layout silently promoting a different
+            // browser tab to the front.
+            placed.extend(claimed.iter().rev().map(|w| w.hwnd));
         } else {
             let match_desc: Vec<&str> = col
                 .match_rules
@@ -667,5 +924,22 @@ pub fn apply_layout(layout_name: &str, layout: &Layout, gap: i32) {
                 .collect();
             log::info!("Column {}: no match for [{}]", i, match_desc.join(", "));
         }
+    }
+
+    // A purely tiled layout has nothing overlapping, so stacking is unobservable
+    // and reordering would churn the z-order for no reason. Once a layout places
+    // columns absolutely they can overlap, and z-order becomes part of the
+    // layout: raising each window in column order leaves the last-declared
+    // column on top.
+    if layout.columns.iter().any(|c| c.x_percent.is_some()) {
+        #[cfg(windows)]
+        for hwnd in &placed {
+            raise_window(*hwnd);
+        }
+        log::info!(
+            "Layout '{}' has absolute columns: stacked {} window(s) in column order",
+            layout_name,
+            placed.len()
+        );
     }
 }

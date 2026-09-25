@@ -1,3 +1,170 @@
+# Testing: match_all — place every matching window (issue #10)
+
+## What Changed
+Branch: `issue-10-match-all` (stacked on #9). Not pushed.
+
+A column claimed exactly one window, so with five browser windows open only the
+topmost got resized — and which one that was depended on what you had clicked last.
+A column with **`match_all = true`** now claims every match and stacks them at the
+same position. They are stacked, not tiled: each gets the column's full width. The
+window that was already on top stays on top; alt-tab between them as usual.
+
+## Your config was updated (backup: `~/.windowsnap/config.toml.pre-matchall`)
+`match_all = true` added to the **browser** and **terminal/editor** columns in
+4-column-dev, dev-lite, chat-browse, and claude-cli. Deliberately NOT added to:
+- **Signal / Claude / doc-md columns** — single windows, nothing to stack.
+- **bluestacks** — its four repeated columns are meant to place four instances
+  side by side. `match_all` would stack them into one slot instead.
+
+## One thing I had to fix while testing — worth knowing
+Your browser columns carried a `{ title_contains = "Notepad" }` fallback (probably
+so the slot was never empty). Harmless when only one window was placed. With
+`match_all` it dragged **every Notepad and Notepad++ window into the browser slot** —
+7 windows stacked instead of 5. I removed that fallback from the browser and
+terminal columns.
+
+The general rule, now in the README: **`match_all` amplifies loose rules.** Before
+switching it on for a column, read its match list and ask what else could match.
+
+## How to Test
+1. Quit the window-snap you currently have running — it is the **older** verify
+   build and does not understand `match_all` (it ignores the field silently).
+2. Launch `target\verify2\release\window-snap.exe`.
+3. Drag three or four browser windows to random positions and sizes.
+4. Press **Ctrl+Alt+3** (chat-browse). Expect: *all* of them snap to the browser
+   column, same position and size, with the one you were last using still in front.
+5. Check `%USERPROFILE%\.windowsnap\windowsnap.log` for
+   `Column 3: stacked N windows at the same position` and one `placed` line per window.
+6. Press **Ctrl+Alt+4** (bluestacks) to confirm the repeated-column behaviour is
+   untouched — those still spread across four slots rather than stacking.
+
+## Already verified end-to-end
+Scattered five browser windows to separate positions, applied chat-browse, and read
+the rectangles back:
+
+```
+BEFORE  x=  60 w=700   how to i create a command like 'dev'...
+        x= 150 w=700   Coat Check - Brave
+        x= 240 w=700   My Downloads - Video Game Music - Brave
+        x= 330 w=700   Creamy White Chili Recipe - Brave
+        x= 420 w=700   The Secret World: Solomon Island - Chrome
+AFTER   all five at x=1787 w=775
+```
+
+33 tests pass, including one asserting `match_all` defaults to false so every
+existing config keeps placing one window per column.
+
+## Note on the build directories
+`target\release` is locked by whatever is running, so these builds went to
+`target\verify` (older) and `target\verify2` (current). Once you quit the running
+instance, a normal `cargo build --release` will put it back in `target\release`
+and you can delete both verify directories.
+
+---
+
+# Testing: Overlapping Windows (issue #9)
+
+## What Changed
+Branch: `issue-9-overlap-columns` (builds on the #8 branch). Not pushed.
+
+Columns could only ever tile — each starting where the last ended — so every extra
+column made everything narrower, and widths over 100% ran off screen rather than
+overlapping. A column can now carry **`x_percent`**, which pins it to an absolute
+position instead. Absolute columns sit outside the tiling flow: they do not consume
+a gap, do not shift their neighbours, and may overlap them. Columns declared later
+are stacked on top. **A layout with no `x_percent` behaves exactly as before.**
+
+## Your config was rewritten (backup: `~/.windowsnap/config.toml.pre-overlap`)
+`4-column-dev` (Ctrl+Alt+1) is now, based on your answer that doc-md, the browser,
+and the terminal/editor are what you need readable at once:
+
+| Column | Width | Actual px |
+| --- | --- | --- |
+| doc-md | 40% tiled | 1030 |
+| VS Code **or** terminal (whichever is open) | 30% tiled | 776 |
+| Browser | 30% tiled | 776 |
+| Claude | `x_percent = 0`, 24% — **laid on top of doc-md** | 616 |
+
+Your browser went from ~380px to 776px. Claude no longer costs a column.
+The other four layouts are unchanged (still pure tiling) so you can compare.
+
+## Two things I measured that you should know
+- **Your monitor is 2560 wide**, not 1920. Earlier percentages I quoted were off.
+- **The Claude app enforces a ~616px minimum width.** I asked for 255px and got 616.
+  That is Claude, not WindowSnap. Its column is set to 24% so the config asks for
+  what it will actually get. It also means Claude covers ~60% of doc-md when
+  stacked — if that bothers you, move it with `x_percent` or drop it from the layout.
+
+## How to Test
+1. Quit the WindowSnap in your tray (it is still the old build).
+2. Launch `target\verify\release\window-snap.exe`.
+3. Press **Ctrl+Alt+1**. Expect: doc-md wide on the left, terminal/VS Code and the
+   browser each ~776px, and Claude sitting on top of doc-md's left edge.
+4. Press **Ctrl+Alt+2** (dev-lite) for the old pure-tiled behaviour to compare.
+5. Check `%USERPROFILE%\.windowsnap\windowsnap.log` — you should see
+   `Layout '4-column-dev' has absolute columns: stacked 4 window(s) in column order`
+   and no WARN lines.
+
+## Already verified end-to-end
+Ran the build on a spare hotkey so it would not fight your running instance, then
+read back the real window rectangles: Claude spans -2..614 while doc-md spans
+-2..1028, so the overlap is real and every tiled column kept its full width.
+28 tests pass, including one that proves a layout without `x_percent` is unchanged.
+
+## To tune it
+`x_percent` is the left edge, `width_percent` the width, both percentages of the
+screen. Keep their sum at or under 100 or the column hangs off the right edge
+(WindowSnap warns in the log if it does). Tray -> Reload Config to apply.
+
+---
+
+# Testing: Config Validation Warnings (issue #8)
+
+## What Changed
+Branch: `issue-8-validate-layout-widths`. Code change is in `src/config.rs` only.
+
+1. **`Config::validate()`** — on every load and every "Reload Config", WindowSnap now
+   writes a WARN to `~/.windowsnap/windowsnap.log` when a layout is broken:
+   - widths summing **over** 100% (columns tile left-to-right, so the excess runs off
+     the right edge and the last column gets a *negative* width)
+   - a layout with **no columns** (usually a pasted `[[layouts.<name>.columns]]` block
+     that named the wrong layout)
+2. **Under 100% does NOT warn.** The last column stretches to absorb the slack, so the
+   layout still fills the screen. The rule is "stays on screen", not "sums to 100".
+3. **One INFO line per load** showing layout shape up front:
+   `Loaded config: 5 layout(s): 4-column-dev (5 cols), bluestacks (4 cols), ...`
+   This is what would have made the doc-md bug obvious in one glance.
+4. Warnings never block loading — one bad layout must not lock you out of the others.
+5. Config template comments updated with both gotchas. No behavior change to snapping.
+
+## Verification already done
+- `cargo test` — 20 pass (6 new in `config.rs`, 2 new in `windows.rs`).
+  The two `windows.rs` tests prove the engine claims: an underfull layout still reaches
+  the screen edge, and an overfull one produces an off-screen column with negative width.
+- **End-to-end against your real broken config**: ran the new binary with the pre-fix
+  `config.toml` and confirmed the log emitted
+  `WARN ... Layout '4-column-dev' has 8 column(s) whose width_percent sums to 300%`.
+  Your live config was restored immediately afterward (hash-verified identical).
+
+## How to Test
+1. The **old** binary is still running in your tray — this build is at
+   `targeterify
+   `target\verify\release\window-snap.exe` (built to a side directory so it wouldn't
+   have to kill your running instance).
+2. Quit the tray app, then launch the new binary.
+3. Open `%USERPROFILE%\.windowsnap\windowsnap.log` — you should see the `Loaded config:`
+   line listing every layout and its column count, and **no warnings** (your config is
+   currently valid).
+4. To see a warning fire: bump any `width_percent` up by 50, tray → **Reload Config**,
+   and check the log tail.
+
+## Still open
+Your point that a 15%-wide browser is useless is **not solved by this change**. The
+engine cannot overlap windows at all today — see issue #9. Your config widths are
+untouched pending that decision.
+
+---
+
 # Testing: Release Logging + Multi-Match Docs (issues #5, #6)
 
 ## What Changed
